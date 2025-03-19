@@ -1,0 +1,49 @@
+{
+  "name": "@typewirets/inversify",
+  "version": "0.1.0",
+  "description": "InversifyJS adapter for TypeWire dependency injection",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint 'src/**/*.ts'"
+  },
+  "keywords": [
+    "typescript",
+    "dependency-injection",
+    "di",
+    "inversify",
+    "adapter",
+    "typewire"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/typewirets.git",
+    "directory": "packages/inversify"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/typewirets/issues"
+  },
+  "homepage": "https://github.com/yourusername/typewirets#readme",
+  "peerDependencies": {
+    "@typewirets/core": "^0.1.0",
+    "inversify": "^6.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@typewirets/core": "^0.1.0",
+    "inversify": "^6.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^0.34.0",
+    "eslint": "^8.0.0"
+  }
+}
