@@ -2,18 +2,36 @@
   "name": "@typewirets/inversify",
   "version": "0.1.0",
   "description": "InversifyJS adapter for TypeWire dependency injection",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "type": "module",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
   "files": [
     "dist",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "pnpm clean && pnpm --filter '@typewirets/inversify' --parallel '/^build:.*/'",
+    "build:cjs": "tsc --project tsconfig.build.json --outDir dist/cjs --module Commonjs --moduleResolution Node",
+    "build:esm": "tsc --project tsconfig.build.json --outDir dist/esm --module ES2020 --moduleResolution Node",
+    "build:types": "tsc --project tsconfig.build.json --outDir dist/types --declaration --declarationMap",
+    "dev": "pnpm clean && pnpm --filter '@typewirets/inversify' --parallel '/^dev:.*/'",
+    "dev:cjs": "tsc --watch --project tsconfig.build.json --outDir dist/cjs --module Commonjs --moduleResolution Node",
+    "dev:esm": "tsc --watch --project tsconfig.build.json --outDir dist/esm --module ES2020 --moduleResolution Node",
+    "dev:types": "tsc --watch --project tsconfig.build.json --outDir dist/types --declaration --declarationMap",
+    "clean": "rimraf dist",
+    "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint 'src/**/*.ts'"
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "typescript",
@@ -23,27 +41,26 @@
     "adapter",
     "typewire"
   ],
-  "author": "Your Name",
+  "author": "Rex Kim",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/typewirets.git",
+    "url": "https://github.com/typewirets/typewirets.git",
     "directory": "packages/inversify"
   },
   "bugs": {
-    "url": "https://github.com/yourusername/typewirets/issues"
+    "url": "https://github.com/typewirets/typewirets/issues"
   },
-  "homepage": "https://github.com/yourusername/typewirets#readme",
-  "peerDependencies": {
-    "@typewirets/core": "^0.1.0",
-    "inversify": "^6.0.0"
-  },
+  "homepage": "https://github.com/typewirets/typewirets#readme",
   "devDependencies": {
-    "@types/node": "^18.0.0",
-    "@typewirets/core": "^0.1.0",
-    "inversify": "^6.0.0",
-    "typescript": "^5.0.0",
-    "vitest": "^0.34.0",
-    "eslint": "^8.0.0"
+    "@typewirets/typescript-config": "workspace:*",
+    "@types/node": "^22.13.10",
+    "rimraf": "^6.0.1",
+    "typescript": "5.8.2",
+    "vitest": "^3.0.8"
+  },
+  "dependencies": {
+    "@typewirets/core": "workspace:*",
+    "inversify": "^7.1.0"
   }
 }
