@@ -30,11 +30,11 @@ export function adaptToResolutionContext(
   container: Container | InnversifyResolutionContext,
 ): TypeWireResolutionContext {
   return {
-    get<T>(symbol: TypedSymbol<T>): T {
-      return container.get(symbol.symbol);
+    get<T>(typedSymbol: TypedSymbol<T>): T {
+      return container.get(typedSymbol.symbol);
     },
-    getAsync<T>(symbol: TypedSymbol<T>): Promise<T> {
-      return container.getAsync(symbol.symbol);
+    getAsync<T>(typedSymbol: TypedSymbol<T>): Promise<T> {
+      return container.getAsync(typedSymbol.symbol);
     },
   } satisfies TypeWireResolutionContext;
 }
@@ -68,13 +68,13 @@ export function adaptToBindingContext(
     },
 
     // biome-ignore lint/suspicious/noExplicitAny: unbind can take any type
-    async unbind(symbol: TypedSymbol<any>): Promise<void> {
-      await container.unbind(symbol.symbol);
+    async unbind(typedSymbol: TypedSymbol<any>): Promise<void> {
+      await container.unbind(typedSymbol.symbol);
     },
 
     // biome-ignore lint/suspicious/noExplicitAny: isBound can take any TypeSymbol
-    isBound(symbol: TypedSymbol<any>): boolean {
-      return container.isBound(symbol.symbol);
+    isBound(typedSymbol: TypedSymbol<any>): boolean {
+      return container.isBound(typedSymbol.symbol);
     },
   } satisfies BindingContext;
 }

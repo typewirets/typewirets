@@ -3,35 +3,35 @@
  * at compile time while providing unique identification at runtime.
  *
  * @template _T The type associated with this symbol. It is only used for type check.
- * 
+ *
  * Note: We cannot use `type TypedSymbol<_T> = symbol` because TypeScript is structurally typed,
  * meaning type aliases are checked by their structure, not their name. This leads to type erasure
  * where the generic parameter T is effectively ignored during type checking because all instances
  * resolve to the same underlying type (symbol).
- * 
+ *
  * For example:
  * ```typescript
  * type TypedSymbol<T> = symbol;
- * 
+ *
  * // These are considered the same type by TypeScript:
  * const userSymbol: TypedSymbol<User> = Symbol('user');
  * const loggerSymbol: TypedSymbol<Logger> = userSymbol; // No error! 😱
  * ```
- * 
+ *
  * By using an object wrapper:
  * ```typescript
  * type TypedSymbol<T> = { symbol: symbol };
  * ```
- * 
+ *
  * We create a "nominal type" that maintains the relationship with T:
  * ```typescript
  * const userSymbol: TypedSymbol<User> = { symbol: Symbol('user') };
  * const loggerSymbol: TypedSymbol<Logger> = userSymbol; // Error! Types are not compatible 👍
  * ```
- * 
+ *
  * This is a common pattern in TypeScript known as "branded types" or "phantom types",
  * where we use the structure of the type to enforce nominal typing behavior.
- * 
+ *
  * For more information on TypeScript's structural type system, see:
  * - TypeScript Handbook on Type Compatibility: https://www.typescriptlang.org/docs/handbook/type-compatibility.html
  * - TypeScript FAQ on Nominal Types: https://github.com/Microsoft/TypeScript/wiki/FAQ#can-i-make-a-type-alias-nominal
