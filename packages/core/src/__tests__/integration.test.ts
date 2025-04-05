@@ -111,7 +111,9 @@ describe("TypeWireTS Integration", () => {
     await serviceBProvider.apply(container);
     await serviceCProvider.apply(container);
     expect(() => serviceCProvider.getInstance(container)).toThrow(
-      /Circular dependency detected/,
+      expect.objectContaining({
+        reason: "CircularDependency"
+      })
     );
   });
 

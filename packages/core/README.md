@@ -244,37 +244,28 @@ interface BindingContext {
 }
 ```
 
-## Circular Dependency Detection
+## Error Handling
 
-TypeWire automatically detects circular dependencies:
+TypeWire provides clear error messages to help with debugging dependency issues. The error messages follow this format:
+
+```
+[Error Type] Error resolving [ServiceName]
+Path: ServiceA -> ServiceB -> ServiceC
+Resolution: [Specific instructions based on error type]
+```
+
+The error messages are designed to be:
+- Clear and actionable
+- Include the full dependency path
+- Provide specific resolution instructions
+- Easy to parse for error tracking tools
+
+You can customize how many path items are shown in error messages:
 
 ```typescript
-// Given circular dependencies
-const serviceAWire = typeWireOf({
-  token: 'ServiceA',
-  creator: (ctx) => new ServiceA(ctx.get(serviceBWire.type))
+const container = new TypeWireContainer({
+  numberOfPathsToPrint: 5 // Limit path length in error messages
 });
-
-const serviceBWire = typeWireOf({
-  token: 'ServiceB',
-  creator: (ctx) => new ServiceB(ctx.get(serviceAWire.type))
-});
-
-// Register them (using async/await)
-async function setupContainer() {
-  await serviceAWire.apply(container);
-  await serviceBWire.apply(container);
-
-  // This will throw a clear circular dependency error
-  try {
-    const serviceA = serviceAWire.getInstance(container);
-  } catch (error) {
-    console.error(error); 
-    // Error: Circular dependency detected: Symbol(ServiceA) -> Symbol(ServiceB) -> Symbol(ServiceA)
-  }
-}
-
-setupContainer();
 ```
 
 ## License

@@ -44,6 +44,22 @@ export type TypedSymbol<_T> = {
 };
 
 /**
+ * Constant representing the singleton scope for dependency instances.
+ * When a dependency is registered with this scope, the same instance
+ * will be returned for all resolutions.
+ */
+const ScopeSingleton = "singleton";
+
+/**
+ * Gets a human-readable description of a typed symbol.
+ * @param typedSymbol - The typed symbol to get the description for
+ * @returns The symbol's description or "unknown" if no description is available
+ */
+function getDescription(typedSymbol: TypedSymbol<unknown>): string {
+  return typedSymbol.symbol.description ?? "unknown";
+}
+
+/**
  * Resolves dependencies from a container.
  * Provides methods to retrieve instances by their type symbols.
  */
@@ -52,21 +68,21 @@ export interface ResolutionContext {
    * Gets an instance of type T synchronously.
    *
    * @template T The type of instance to get
-   * @param symbol The typed symbol identifying the dependency
+   * @param typedSymbol The typed symbol identifying the dependency
    * @returns An instance of type T
    * @throws Error if the dependency cannot be resolved synchronously or is not found
    */
-  get<T>(symbol: TypedSymbol<T>): T;
+  get<T>(typedSymbol: TypedSymbol<T>): T;
 
   /**
    * Gets an instance of type T asynchronously.
    *
    * @template T The type of instance to get
-   * @param symbol The typed symbol identifying the dependency
+   * @param typedSymbol The typed symbol identifying the dependency
    * @returns A promise that resolves to an instance of type T
    * @throws Error if the dependency is not found
    */
-  getAsync<T>(symbol: TypedSymbol<T>): Promise<T>;
+  getAsync<T>(typedSymbol: TypedSymbol<T>): Promise<T>;
 }
 
 /**
@@ -130,7 +146,6 @@ export interface TypeWireDefinition<T> {
    * The scope that determines instance lifecycle.
    * - 'singleton': One instance shared across all resolutions (default)
    * - 'transient': New instance created for each resolution
-   * - 'request': One instance per resolution context
    */
   readonly scope?: string;
 
@@ -265,8 +280,17 @@ export class StandardTypeWire<T> implements TypeWireDefinition<T> {
 }
 
 /**
+ * Helper function to check if a value is a Promise.
+ * @template T The type of the promise value
+ * @param value The value to check
+ * @returns True if the value is a Promise, false otherwise
+ */
+function isPromise<T>(value: unknown): value is Promise<T> {
+  return typeof value === "object" && value !== null && "then" in value;
+}
+
+/**
  * Creates a typed symbol for the specified token.
- *
  * @template T The type to associate with the symbol
  * @param token A string identifier for debugging purposes
  * @returns A typed symbol for type T
@@ -277,7 +301,6 @@ export function typedSymbolOf<T>(token: string): TypedSymbol<T> {
 
 /**
  * Options for creating a provider.
- *
  * @template T The type of instance the provider will create
  */
 export interface TypeWireOpts<T> {
@@ -301,7 +324,6 @@ export interface TypeWireOpts<T> {
 
 /**
  * Creates a provider for instances of type T.
- *
  * @template T The type of instance the provider will create
  * @param opts Options for creating the provider
  * @returns A provider definition for type T
@@ -313,18 +335,360 @@ export function typeWireOf<T>(opts: TypeWireOpts<T>): TypeWireDefinition<T> {
 }
 
 /**
- * Helper function to check if a value is a Promise.
- *
- * @template T The type of the promise value
- * @param value The value to check
- * @returns True if the value is a Promise, false otherwise
+ * Options for configuring a TypeWire container.
  */
-function isPromise<T>(value: unknown): value is Promise<T> {
-  return typeof value === "object" && value !== null && "then" in value;
+export interface TypeWireContianerOpts {
+  /** Optional custom resolution monitor for tracking dependency resolution */
+  resolutionMonitor?: ResolutionMonitor;
+  /** Optional limit on how many path items to display in error messages */
+  numberOfPathsToPrint?: number;
 }
 
-export interface TypeWireContianerOpts {
-  resolutionMonitor?: ResolutionMonitor;
+/**
+ * A synchronous action that can be passed to the ResolutionMonitor.
+ * @template T The type of the action's result
+ * @throws {TypeWireError | Error} If the action fails
+ */
+export type SyncAction<T> = () => T;
+
+/**
+ * An asynchronous action that can be passed to the ResolutionMonitor.
+ * @template T The type of the action's result
+ * @throws {TypeWireError | Error} If the action fails
+ */
+export type AsyncAction<T> = () => T | Promise<T>;
+
+/**
+ * Monitors dependency resolution to detect issues and collect information.
+ * This interface allows for custom monitoring implementations.
+ */
+export interface ResolutionMonitor {
+  /**
+   * Monitors a synchronous dependency resolution.
+   * @template T The type of the resolution result
+   * @param typedSymbol The typed symbol being resolved
+   * @param action The synchronous resolution function to execute
+   * @returns The result of the resolution function
+   * @throws {TypeWireError | Error} If resolution fails
+   */
+  monitor<T>(typedSymbol: TypedSymbol<T>, action: SyncAction<T>): T;
+
+  /**
+   * Monitors an asynchronous dependency resolution.
+   * @template T The type of the resolution result
+   * @param typedSymbol The typed symbol being resolved
+   * @param action The asynchronous resolution function to execute
+   * @returns A promise that resolves to the result of the resolution function
+   * @throws {TypeWireError | Error} If resolution fails
+   */
+  monitorAsync<T>(
+    typedSymbol: TypedSymbol<T>,
+    action: AsyncAction<T>,
+  ): Promise<T>;
+}
+
+/**
+ * Tracks dependency resolution and detects circular dependencies.
+ * This is the default implementation of ResolutionMonitor.
+ */
+export class CircularDependencyMonitor implements ResolutionMonitor {
+  /**
+   * Set of symbols currently being resolved.
+   */
+  private readonly resolutionSet: Set<symbol> = new Set();
+
+  /**
+   * The current resolution path.
+   */
+  private readonly resolutionStack: TypedSymbol<unknown>[] = [];
+
+  /**
+   * Optional limit on how many path items to display in error messages.
+   */
+  private readonly numberOfPathsToPrint?: number;
+
+  /**
+   * Creates a new CircularDependencyMonitor.
+   * @param opts Configuration options for the monitor
+   */
+  constructor(opts: {
+    numberOfPathsToPrint?: number;
+  }) {
+    this.numberOfPathsToPrint = opts.numberOfPathsToPrint;
+  }
+
+  /**
+   * Adds a typed symbol to the resolution stack.
+   * @param typedSymbol The typed symbol to add
+   */
+  private add(typedSymbol: TypedSymbol<unknown>) {
+    this.resolutionSet.add(typedSymbol.symbol);
+    this.resolutionStack.push(typedSymbol);
+  }
+
+  /**
+   * Removes a typed symbol from the resolution stack.
+   * @param typedSymbol The typed symbol to remove
+   */
+  private remove(typedSymbol: TypedSymbol<unknown>) {
+    this.resolutionSet.delete(typedSymbol.symbol);
+    this.resolutionStack.pop();
+  }
+
+  /**
+   * Tracks a dependency resolution, detecting circular dependencies.
+   * @template T The type of the resolution result
+   * @param typedSymbol The typed symbol being resolved
+   * @param action The resolution function to execute
+   * @returns The result of the resolution function
+   * @throws {TypeWireError | Error} If a circular dependency is detected or action throws
+   */
+  monitor<T>(typedSymbol: TypedSymbol<T>, action: SyncAction<T>): T {
+    try {
+      // Check for circular dependency
+      if (this.resolutionSet.has(typedSymbol.symbol)) {
+        throw TypeWireError.circularDependency();
+      }
+
+      // Add to resolution stack
+      this.add(typedSymbol);
+
+      // Execute the resolution action
+      return action();
+    } catch (err: unknown) {
+      if (err instanceof TypeWireError && !err.message) {
+        err.message = getErrorMessage({
+          type: typedSymbol,
+          reason: err.reason,
+          paths: [...this.resolutionStack],
+          numberOfPathsToPrint: this.numberOfPathsToPrint,
+        });
+        throw err;
+      }
+
+      throw err;
+    } finally {
+      // Remove from resolution stack when done
+      this.remove(typedSymbol);
+    }
+  }
+
+  /**
+   * Tracks an asynchronous dependency resolution, detecting circular dependencies.
+   * @template T The type of the resolution result
+   * @param typedSymbol The typed symbol being resolved
+   * @param action The asynchronous resolution function to execute
+   * @returns A promise that resolves to the result of the resolution function
+   * @throws {TypeWireError | Error} If a circular dependency is detected or action throws
+   */
+  async monitorAsync<T>(
+    typedSymbol: TypedSymbol<T>,
+    action: AsyncAction<T>,
+  ): Promise<T> {
+    try {
+      // Check for circular dependency
+      if (this.resolutionSet.has(typedSymbol.symbol)) {
+        throw TypeWireError.circularDependency();
+      }
+
+      // Add to resolution stack
+      this.add(typedSymbol);
+
+      // Execute the resolution action
+      return await action();
+    } catch (err: unknown) {
+      if (err instanceof TypeWireError && !err.message) {
+        err.message = getErrorMessage({
+          type: typedSymbol,
+          reason: err.reason,
+          paths: [...this.resolutionStack],
+          numberOfPathsToPrint: this.numberOfPathsToPrint,
+        });
+      }
+
+      throw err;
+    } finally {
+      // Remove from resolution stack when done
+      this.remove(typedSymbol);
+    }
+  }
+
+  /**
+   * Checks if the tracker is currently resolving any dependencies.
+   * @returns True if any dependencies are being resolved, false otherwise
+   */
+  isResolving(): boolean {
+    return this.resolutionStack.length > 0;
+  }
+}
+
+/**
+ * Represents the possible reasons for a TypeWire error.
+ * Can be one of the predefined reasons or a custom string.
+ */
+export type ErrorReason =
+  | "BindingNotFound"
+  | "AsyncOnlyBinding"
+  | "CircularDependency"
+  | "Unknown"
+  | string;
+
+/**
+ * Error reason indicating that a dependency was not found in the container.
+ */
+const ReasonBindingNotFound: ErrorReason = "BindingNotFound";
+
+/**
+ * Error reason indicating that a dependency can only be resolved asynchronously.
+ */
+const ReasonAsyncOnlyBinding: ErrorReason = "AsyncOnlyBinding";
+
+/**
+ * Error reason indicating that a circular dependency was detected in the resolution chain.
+ */
+const ReasonCircularDependency: ErrorReason = "CircularDependency";
+
+/**
+ * Error class for TypeWire dependency resolution failures.
+ * Provides detailed error messages including the resolution path and guidance.
+ */
+export class TypeWireError extends Error {
+  public readonly reason: ErrorReason;
+
+  /**
+   * Creates a new TypeWireError.
+   * @param reason - The reason for the error
+   * @param message - Optional custom error message
+   */
+  constructor(reason: ErrorReason, message?: string) {
+    super(message);
+    this.name = "TypeWireError";
+    Object.setPrototypeOf(this, TypeWireError.prototype);
+    Object.defineProperty(this, "reason", {
+      value: reason,
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    });
+    this.reason = reason;
+  }
+
+  /**
+   * Creates a TypeWireError for a binding not found scenario.
+   * @param message - Optional custom error message
+   * @returns A new TypeWireError with BindingNotFound reason
+   */
+  static bindingNotFound(message?: string): TypeWireError {
+    return new TypeWireError(ReasonBindingNotFound, message);
+  }
+
+  /**
+   * Creates a TypeWireError for a circular dependency scenario.
+   * @param message - Optional custom error message
+   * @returns A new TypeWireError with CircularDependency reason
+   */
+  static circularDependency(message?: string): TypeWireError {
+    return new TypeWireError(ReasonCircularDependency, message);
+  }
+
+  /**
+   * Creates a TypeWireError for an async-only binding scenario.
+   * @param message - Optional custom error message
+   * @returns A new TypeWireError with AsyncOnlyBinding reason
+   */
+  static asyncBindingOnly(message?: string): TypeWireError {
+    return new TypeWireError(ReasonAsyncOnlyBinding, message);
+  }
+}
+
+/**
+ * Options for creating a TypeWire error.
+ */
+export interface TypeWireErrorOpt {
+  /** The type symbol that failed to resolve */
+  type: TypedSymbol<unknown>;
+
+  /** The reason for the error */
+  reason: ErrorReason;
+
+  /** The resolution path that led to the error */
+  paths: TypedSymbol<unknown>[];
+
+  /** Optional limit on how many path items to display in the error message */
+  numberOfPathsToPrint?: number;
+}
+
+/**
+ * Gets a human-readable instruction for resolving the error based on its reason.
+ * @param opts - The error options containing the reason and context
+ * @returns A string containing guidance on how to resolve the error
+ */
+function getInstruction(opts: TypeWireErrorOpt): string {
+  switch (opts.reason) {
+    case ReasonAsyncOnlyBinding:
+      return "Use `getInstanceAsync` to resolve this dependency asynchronously.";
+    case ReasonBindingNotFound:
+      return "Ensure the dependency is registered in the container before attempting resolution.";
+    case ReasonCircularDependency:
+      return "Check for circular references in your dependency graph and refactor to break the cycle.";
+    default:
+      return "Review the dependency configuration for potential issues.";
+  }
+}
+
+/**
+ * Formats the dependency resolution path for error messages.
+ * Handles truncation when the path exceeds the specified length limit.
+ * @param paths - The array of type symbols in the resolution path
+ * @param numberOfPathsToPrint - Optional limit on how many path items to display
+ * @returns An object containing the formatted path and any truncation prefix
+ */
+function formatDependencyPath(
+  paths: TypedSymbol<unknown>[],
+  numberOfPathsToPrint?: number,
+): { prefix: string; formattedPath: string } {
+  const connector = " -> ";
+  let prefix = "";
+  let depsToPrint = [...paths];
+
+  if (
+    numberOfPathsToPrint !== undefined &&
+    depsToPrint.length > numberOfPathsToPrint
+  ) {
+    const size = depsToPrint.length;
+    const rest = size - numberOfPathsToPrint;
+    prefix = `truncated(${rest})... ${connector}`;
+    depsToPrint = depsToPrint.slice(size - numberOfPathsToPrint, size);
+  }
+
+  return {
+    prefix,
+    formattedPath: depsToPrint.map(getDescription).join(connector),
+  };
+}
+
+/**
+ * Formats a complete error message with all components.
+ * Includes the error header, reason, resolution instruction, and the resolution path.
+ * @param opts - The error options containing all necessary context
+ * @returns A formatted error message string
+ */
+function getErrorMessage(opts: TypeWireErrorOpt): string {
+  const paths =
+    opts.reason === ReasonCircularDependency
+      ? [...opts.paths, opts.type]
+      : opts.paths;
+
+  const { prefix, formattedPath } = formatDependencyPath(
+    paths,
+    opts.numberOfPathsToPrint,
+  );
+
+  return `Failed To Resolve ${getDescription(opts.type)}
+Reason: ${opts.reason}
+Instruction: ${getInstruction(opts)}
+Resolution Path: [${prefix}${formattedPath}]
+`;
 }
 
 /**
@@ -349,17 +713,20 @@ export class TypeWireContainer implements ResolutionContext, BindingContext {
 
   /**
    * Creates a new TypeWireContainer.
+   * @param opts Optional configuration options
    */
   constructor(opts?: TypeWireContianerOpts) {
     this.bindings = new Map();
     this.singletons = new Map();
     this.resolutionMonitor =
-      opts?.resolutionMonitor ?? new CircularDependencyMonitor();
+      opts?.resolutionMonitor ??
+      new CircularDependencyMonitor({
+        numberOfPathsToPrint: opts?.numberOfPathsToPrint,
+      });
   }
 
   /**
    * Binds a provider to the container.
-   *
    * @param provider The provider to bind
    */
   // biome-ignore lint/suspicious/noExplicitAny: bind can take any type
@@ -369,39 +736,36 @@ export class TypeWireContainer implements ResolutionContext, BindingContext {
 
   /**
    * Checks if a binding exists in the container.
-   *
-   * @param type The typed symbol to check
+   * @param typedSymbol The typed symbol to check
    * @returns True if the binding exists, false otherwise
    */
   // biome-ignore lint/suspicious/noExplicitAny: isBound can take any type
-  isBound(type: TypedSymbol<any>): boolean {
-    return this.bindings.has(type.symbol);
+  isBound(typedSymbol: TypedSymbol<any>): boolean {
+    return this.bindings.has(typedSymbol.symbol);
   }
 
   /**
    * Removes a binding from the container.
    * Also removes any singleton instances of the binding.
-   *
-   * @param type The typed symbol identifying the binding to remove
+   * @param typedSymbol The typed symbol identifying the binding to remove
    */
   // biome-ignore lint/suspicious/noExplicitAny: unbind can take any type
-  async unbind(type: TypedSymbol<any>): Promise<void> {
-    this.bindings.delete(type.symbol);
-    this.singletons.delete(type.symbol);
+  async unbind(typedSymbol: TypedSymbol<any>): Promise<void> {
+    this.bindings.delete(typedSymbol.symbol);
+    this.singletons.delete(typedSymbol.symbol);
   }
 
   /**
    * Gets the provider definition for a typed symbol.
-   *
    * @template T The type of instance the provider creates
-   * @param type The typed symbol to get the provider for
+   * @param typedSymbol The typed symbol to get the provider for
    * @returns The provider definition
    * @throws Error if no provider is found for the symbol
    */
-  private getBinding<T>(type: TypedSymbol<T>): TypeWireDefinition<T> {
-    const binding = this.bindings.get(type.symbol);
+  private getBinding<T>(typedSymbol: TypedSymbol<T>): TypeWireDefinition<T> {
+    const binding = this.bindings.get(typedSymbol.symbol);
     if (!binding) {
-      throw new Error(`Binding for ${type.symbol.description} not found`);
+      throw TypeWireError.bindingNotFound();
     }
 
     return binding as TypeWireDefinition<T>;
@@ -410,26 +774,25 @@ export class TypeWireContainer implements ResolutionContext, BindingContext {
   /**
    * Gets an instance of type T asynchronously.
    * Supports both synchronous and asynchronous creators.
-   *
    * @template T The type of instance to get
-   * @param type The typed symbol identifying the dependency
+   * @param typedSymbol The typed symbol identifying the dependency
    * @returns A promise that resolves to an instance of type T
    * @throws Error if the dependency is not found or if a circular dependency is detected
    */
-  async getAsync<T>(type: TypedSymbol<T>): Promise<T> {
-    return this.resolutionMonitor.monitor(type.symbol, async () => {
-      const binding = this.getBinding(type);
+  async getAsync<T>(typedSymbol: TypedSymbol<T>): Promise<T> {
+    return this.resolutionMonitor.monitorAsync(typedSymbol, async () => {
+      const binding = this.getBinding(typedSymbol);
       const creator = binding.creator;
-      const scope = binding.scope ?? "singleton";
+      const scope = binding.scope ?? ScopeSingleton;
 
-      if (scope === "singleton") {
-        const singleton = this.singletons.get(type.symbol);
+      if (scope === ScopeSingleton) {
+        const singleton = this.singletons.get(typedSymbol.symbol);
         if (singleton) {
           return singleton as T;
         }
 
         const result = await binding.creator(this);
-        this.singletons.set(type.symbol, result);
+        this.singletons.set(typedSymbol.symbol, result);
         return result as T;
       }
 
@@ -437,6 +800,10 @@ export class TypeWireContainer implements ResolutionContext, BindingContext {
     });
   }
 
+  /**
+   * Gets all instances from the container asynchronously.
+   * @returns A promise that resolves to a map of all instances
+   */
   async getAllAsync(): Promise<Map<symbol, unknown>> {
     const result = new Map<symbol, unknown>();
     for (const binding of this.bindings.values()) {
@@ -449,173 +816,39 @@ export class TypeWireContainer implements ResolutionContext, BindingContext {
   /**
    * Gets an instance of type T synchronously.
    * Only supports synchronous creators.
-   *
    * @template T The type of instance to get
-   * @param type The typed symbol identifying the dependency
+   * @param typedSymbol The typed symbol identifying the dependency
    * @returns An instance of type T
    * @throws Error if the dependency is not found, if the creator is asynchronous,
    *         or if a circular dependency is detected
    */
-  get<T>(type: TypedSymbol<T>): T {
-    return this.resolutionMonitor.monitor(type.symbol, () => {
-      const binding = this.getBinding(type);
+  get<T>(typedSymbol: TypedSymbol<T>): T {
+    return this.resolutionMonitor.monitor(typedSymbol, () => {
+      const binding = this.getBinding(typedSymbol);
       const creator = binding.creator;
-      const scope = binding.scope ?? "singleton";
+      const scope = binding.scope ?? ScopeSingleton;
 
-      if (scope === "singleton") {
-        const singleton = this.singletons.get(type.symbol);
+      if (scope === ScopeSingleton) {
+        const singleton = this.singletons.get(typedSymbol.symbol);
         if (singleton) {
           return singleton as T;
         }
 
         const result = creator(this);
         if (isPromise(result)) {
-          throw new Error(
-            "Cannot get a promise creator with get method. Use getAsync instead.",
-          );
+          throw TypeWireError.asyncBindingOnly();
         }
 
-        this.singletons.set(type.symbol, result);
+        this.singletons.set(typedSymbol.symbol, result);
         return result as T;
       }
 
       const result = creator(this);
       if (isPromise(result)) {
-        throw new Error(
-          "Cannot get a promise creator with get method. Use getAsync instead.",
-        );
+        throw TypeWireError.asyncBindingOnly();
       }
 
       return result as T;
     });
-  }
-}
-
-/**
- * Monitors dependency resolution to detect issues and collect information
- */
-export interface ResolutionMonitor {
-  /**
-   * Monitors a synchronous dependency resolution
-   *
-   * @template T The type of the resolution result
-   * @param symbol The symbol being resolved
-   * @param action The synchronous resolution function to execute
-   * @returns The result of the resolution function
-   */
-  monitor<T>(symbol: symbol, action: () => T): T;
-
-  /**
-   * Monitors an asynchronous dependency resolution
-   *
-   * @template T The type of the resolution result
-   * @param symbol The symbol being resolved
-   * @param action The asynchronous resolution function to execute
-   * @returns A promise that resolves to the result of the resolution function
-   */
-  monitorAsync<T>(symbol: symbol, action: () => Promise<T>): Promise<T>;
-}
-
-/**
- * Tracks dependency resolution and detects circular dependencies.
- */
-export class CircularDependencyMonitor implements ResolutionMonitor {
-  /**
-   * Set of symbols currently being resolved.
-   */
-  private readonly resotlutionSet: Set<symbol> = new Set();
-
-  /**
-   * The current resolution path.
-   */
-  private readonly resolutionStack: symbol[] = [];
-
-  private add(symbol: symbol) {
-    this.resotlutionSet.add(symbol);
-    this.resolutionStack.push(symbol);
-  }
-
-  private remove(symbol: symbol) {
-    this.resotlutionSet.delete(symbol);
-    this.resolutionStack.pop();
-  }
-
-  /**
-   * Tracks a dependency resolution, detecting circular dependencies.
-   *
-   * @template T The type of the resolution result
-   * @param symbol The symbol being resolved
-   * @param action The resolution function to execute
-   * @returns The result of the resolution function
-   * @throws Error if a circular dependency is detected
-   */
-  monitor<T>(symbol: symbol, action: () => T): T {
-    // Check for circular dependency
-    if (this.resotlutionSet.has(symbol)) {
-      const path = this.getCurrentPath();
-      path.push(symbol.description as string);
-      throw new Error(`Circular dependency detected: ${path.join(" -> ")}`);
-    }
-
-    try {
-      // Add to resolution stack
-      this.add(symbol);
-
-      // Execute the resolution action
-      return action();
-    } finally {
-      // Remove from resolution stack when done
-      this.remove(symbol);
-    }
-  }
-
-  /**
-   * Tracks a dependency resolution, detecting circular dependencies.
-   *
-   * @template T The type of the resolution result
-   * @param symbol The symbol being resolved
-   * @param action The resolution function to execute
-   * @returns The result of the resolution function
-   * @throws Error if a circular dependency is detected
-   */
-  async monitorAsync<T>(
-    symbol: symbol,
-    action: () => T | Promise<T>,
-  ): Promise<T> {
-    // Check for circular dependency
-    if (this.resotlutionSet.has(symbol)) {
-      const path = this.getCurrentPath();
-      path.push(symbol.description as string);
-      throw new Error(`Circular dependency detected: ${path.join(" -> ")}`);
-    }
-
-    try {
-      // Add to resolution stack
-      this.add(symbol);
-
-      // Execute the resolution action
-      return await action();
-    } finally {
-      // Remove from resolution stack when done
-      this.remove(symbol);
-    }
-  }
-
-  /**
-   * Gets the current resolution path for testing/debugging.
-   *
-   * @returns Array of string representations of symbols in the current resolution path
-   */
-  getCurrentPath(): string[] {
-    return this.resolutionStack.map((s) => s.description as string);
-  }
-
-  /**
-   * Checks if the tracker is currently resolving any dependencies.
-   *
-   * @returns True if any dependencies are being resolved, false otherwise
-   */
-  isResolving(): boolean {
-    return this.resolutionStack.length > 0;
   }
 }

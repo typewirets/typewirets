@@ -55,7 +55,11 @@ describe("TypeWireContainer", () => {
       const symbol = typedSymbolOf<TestService>("notBound");
 
       // Act & Assert
-      expect(() => container.get(symbol)).toThrow(/not found/);
+      expect(() => container.get(symbol)).toThrow(
+        expect.objectContaining({
+          reason: "BindingNotFound"
+        })
+      );
     });
 
     it("should support dependent providers", async () => {
@@ -154,7 +158,11 @@ describe("TypeWireContainer", () => {
       await asyncServiceWire.apply(container);
 
       // Assert
-      expect(() => asyncServiceWire.getInstance(container)).toThrow(/promise/i);
+      expect(() => asyncServiceWire.getInstance(container)).toThrow(
+        expect.objectContaining({
+          reason: "AsyncOnlyBinding"
+        })
+      );
     });
 
     it("should cache singleton async instances", async () => {
@@ -196,7 +204,11 @@ describe("TypeWireContainer", () => {
 
       // Assert
       expect(container.isBound(testServiceWire.type)).toBe(false);
-      expect(() => container.get(testServiceWire.type)).toThrow(/not found/);
+      expect(() => container.get(testServiceWire.type)).toThrow(
+        expect.objectContaining({
+          reason: "BindingNotFound"
+        })
+      );
     });
 
     it("should remove singleton instances when unbinding", async () => {

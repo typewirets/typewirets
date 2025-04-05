@@ -128,3 +128,41 @@ TypeWire separates the definition of how to create a dependency (TypeWireDefinit
 - More flexible composition possibilities
 - Better testability as each aspect can be tested independently
 - Easier to adapt to different container implementations 
+
+## Addressing Common DI Criticisms
+
+Dependency Injection (DI) often faces criticism for being "over-engineering" or "too complex". These perceptions usually stem from experiences with heavyweight DI frameworks. TypeWire addresses these concerns directly:
+
+### 1. Framework Overhead
+**Criticism**: DI frameworks add unnecessary complexity and bloat.
+**TypeWire's Approach**:
+- Minimal bundle size with no external dependencies
+- No runtime metadata or reflection
+- Simple, focused API surface
+- Works well with tree-shaking
+
+### 2. Configuration Complexity
+**Criticism**: Setting up containers and bindings feels like unnecessary ceremony.
+**TypeWire's Approach**:
+- Functional composition instead of complex configuration
+- Immutable definitions that are easy to reason about
+- Clear separation between definition and resolution
+- Progressive adoption path
+
+### 3. Learning Curve
+**Criticism**: Understanding DI patterns and best practices takes too much time.
+**TypeWire's Approach**:
+- Familiar TypeScript patterns
+- Explicit dependencies that are easy to understand
+- Clear error messages for common issues
+- Minimal concepts to learn
+
+### 4. Premature Abstraction
+**Criticism**: DI encourages abstraction where simple code would suffice.
+**TypeWire's Approach**:
+- No forced patterns or abstractions
+- Support for both simple and complex use cases
+- Clear guidance on when to use DI
+- Ability to start simple and add complexity as needed
+
+The key insight is that DI isn't about adding complexity - it's about managing complexity that already exists in your application. TypeWire provides the tools to handle this complexity without introducing unnecessary overhead. 
