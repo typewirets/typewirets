@@ -244,37 +244,56 @@ interface BindingContext {
 }
 ```
 
-## Circular Dependency Detection
+## Error Handling
 
-TypeWire automatically detects circular dependencies:
+TypeWire provides clear error messages to help with debugging dependency issues. The error messages follow this format:
+
+```
+[Error Type] Error resolving [ServiceName]
+Path: ServiceA -> ServiceB -> ServiceC
+Resolution: [Specific instructions based on error type]
+```
+
+The error messages are designed to be:
+- Clear and actionable
+- Include the full dependency path
+- Provide specific resolution instructions
+- Easy to parse for error tracking tools
+
+You can customize how many path items are shown in error messages:
 
 ```typescript
-// Given circular dependencies
-const serviceAWire = typeWireOf({
-  token: 'ServiceA',
-  creator: (ctx) => new ServiceA(ctx.get(serviceBWire.type))
+const container = new TypeWireContainer({
+  numberOfPathsToPrint: 5 // Limit path length in error messages
 });
+```
 
-const serviceBWire = typeWireOf({
-  token: 'ServiceB',
-  creator: (ctx) => new ServiceB(ctx.get(serviceAWire.type))
-});
+## Circular Dependency Detection
 
-// Register them (using async/await)
-async function setupContainer() {
-  await serviceAWire.apply(container);
-  await serviceBWire.apply(container);
+TypeWire uses a `ResolutionMonitor` to track and detect circular dependencies. The default implementation, `CircularDependencyMonitor`, provides:
 
-  // This will throw a clear circular dependency error
-  try {
-    const serviceA = serviceAWire.getInstance(container);
-  } catch (error) {
-    console.error(error); 
-    // Error: Circular dependency detected: Symbol(ServiceA) -> Symbol(ServiceB) -> Symbol(ServiceA)
+- Automatic detection of circular dependencies
+- Detailed error messages with dependency paths
+- Configurable path length in error messages
+
+You can provide a custom monitor for specialized dependency tracking:
+
+```typescript
+class CustomResolutionMonitor implements ResolutionMonitor {
+  monitor<T>(symbol: TypedSymbol<T>, fn: () => T): T {
+    // Custom monitoring logic
+    return fn();
+  }
+
+  monitorAsync<T>(symbol: TypedSymbol<T>, fn: () => Promise<T>): Promise<T> {
+    // Custom async monitoring logic
+    return fn();
   }
 }
 
-setupContainer();
+const container = new TypeWireContainer({
+  resolutionMonitor: new CustomResolutionMonitor()
+});
 ```
 
 ## License
