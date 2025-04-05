@@ -268,34 +268,6 @@ const container = new TypeWireContainer({
 });
 ```
 
-## Circular Dependency Detection
-
-TypeWire uses a `ResolutionMonitor` to track and detect circular dependencies. The default implementation, `CircularDependencyMonitor`, provides:
-
-- Automatic detection of circular dependencies
-- Detailed error messages with dependency paths
-- Configurable path length in error messages
-
-You can provide a custom monitor for specialized dependency tracking:
-
-```typescript
-class CustomResolutionMonitor implements ResolutionMonitor {
-  monitor<T>(symbol: TypedSymbol<T>, fn: () => T): T {
-    // Custom monitoring logic
-    return fn();
-  }
-
-  monitorAsync<T>(symbol: TypedSymbol<T>, fn: () => Promise<T>): Promise<T> {
-    // Custom async monitoring logic
-    return fn();
-  }
-}
-
-const container = new TypeWireContainer({
-  resolutionMonitor: new CustomResolutionMonitor()
-});
-```
-
 ## License
 
 MIT 
