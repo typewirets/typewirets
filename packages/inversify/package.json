@@ -24,7 +24,7 @@
     "dev:esm": "tsc --watch --project tsconfig.build.json --outDir dist/esm --module ES2020 --moduleResolution Node",
     "dev:types": "tsc --watch --project tsconfig.build.json --outDir dist/types --declaration --declarationMap",
     "clean": "rimraf dist",
-    "type-check": "tsc --noEmit",
+    "check-types": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
