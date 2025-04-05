@@ -1,0 +1,44 @@
+{
+  "name": "@typewirets/express-example",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Express Example",
+  "scripts": {
+    "clean": "rimraf dist",
+    "check-types": "tsc --noEmit",
+    "start": "pnpm dlx tsx ./src/main.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "author": "Rex Kim",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/typewirets/typewirets.git",
+    "directory": "recipes/express-example"
+  },
+  "bugs": {
+    "url": "https://github.com/typewirets/typewirets/issues"
+  },
+  "homepage": "https://github.com/typewirets/typewirets#readme",
+  "devDependencies": {
+    "@types/express": "^5.0.1",
+    "@types/node": "^22.13.10",
+    "@types/pg": "^8.11.11",
+    "@typewirets/typescript-config": "workspace:*",
+    "rimraf": "^6.0.1",
+    "supertest": "^7.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "5.8.2",
+    "vitest": "^3.0.8"
+  },
+  "dependencies": {
+    "@typewirets/core": "workspace:*",
+    "express": "^5.1.0",
+    "jsonc-parser": "^3.3.1",
+    "pg": "^8.14.1",
+    "zod": "^3.24.2"
+  }
+}

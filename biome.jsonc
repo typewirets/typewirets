@@ -8,7 +8,7 @@
   },
   "files": {
     "ignoreUnknown": false,
-    "ignore": [".direnv/*", ".next/*", ".turbo/*"]
+    "ignore": [".direnv/*", ".next/*", ".turbo/*", "dist/*"]
   },
   "formatter": {
     "enabled": true,

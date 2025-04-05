@@ -5,8 +5,9 @@ import type {
   BindingScope,
 } from "inversify";
 import type {
-  TypedSymbol,
-  TypeWireDefinition,
+  TypeSymbol,
+  AnyTypeSymbol,
+  AnyTypeWire,
   ResolutionContext as TypeWireResolutionContext,
   BindingContext,
 } from "@typewirets/core";
@@ -30,11 +31,11 @@ export function adaptToResolutionContext(
   container: Container | InnversifyResolutionContext,
 ): TypeWireResolutionContext {
   return {
-    get<T>(typedSymbol: TypedSymbol<T>): T {
-      return container.get(typedSymbol.symbol);
+    getSync<T>(typeSymbol: TypeSymbol<T>): T {
+      return container.get(typeSymbol.symbol);
     },
-    getAsync<T>(typedSymbol: TypedSymbol<T>): Promise<T> {
-      return container.getAsync(typedSymbol.symbol);
+    get<T>(typeSymbol: TypeSymbol<T>): Promise<T> {
+      return container.getAsync(typeSymbol.symbol);
     },
   } satisfies TypeWireResolutionContext;
 }
@@ -43,8 +44,7 @@ export function adaptToBindingContext(
   container: Container | ContainerModuleLoadOptions,
 ): BindingContext {
   return {
-    // biome-ignore lint/suspicious/noExplicitAny: bind can take any type
-    bind(binding: TypeWireDefinition<any>) {
+    bind(binding: AnyTypeWire) {
       const bound = container
         .bind(binding.type.symbol)
         .toDynamicValue((ctx) => {
@@ -67,14 +67,12 @@ export function adaptToBindingContext(
       }
     },
 
-    // biome-ignore lint/suspicious/noExplicitAny: unbind can take any type
-    async unbind(typedSymbol: TypedSymbol<any>): Promise<void> {
-      await container.unbind(typedSymbol.symbol);
+    async unbind(typeSymbol: AnyTypeSymbol): Promise<void> {
+      await container.unbind(typeSymbol.symbol);
     },
 
-    // biome-ignore lint/suspicious/noExplicitAny: isBound can take any TypeSymbol
-    isBound(typedSymbol: TypedSymbol<any>): boolean {
-      return container.isBound(typedSymbol.symbol);
+    isBound(typeSymbol: AnyTypeSymbol): boolean {
+      return container.isBound(typeSymbol.symbol);
     },
   } satisfies BindingContext;
 }
@@ -94,24 +92,24 @@ export class InversifyAdapter
     this.bindingContext = adaptToBindingContext(container);
   }
 
-  get<T>(typedSymbol: TypedSymbol<T>): T {
-    return this.resolutionContext.get(typedSymbol);
+  getSync<T>(typeSymbol: AnyTypeSymbol): T {
+    return this.resolutionContext.getSync(typeSymbol);
   }
 
-  getAsync<T>(typedSymbol: TypedSymbol<T>): Promise<T> {
-    return this.resolutionContext.getAsync(typedSymbol);
+  get<T>(typeSymbol: TypeSymbol<T>): Promise<T> {
+    return this.resolutionContext.get(typeSymbol);
   }
 
-  bind(typeWire: TypeWireDefinition<unknown>): void | Promise<void> {
+  bind(typeWire: AnyTypeWire): void | Promise<void> {
     return this.bindingContext.bind(typeWire);
   }
 
-  async unbind(typedSymbol: TypedSymbol<unknown>): Promise<void> {
-    await this.bindingContext.unbind(typedSymbol);
+  async unbind(typeSymbol: AnyTypeSymbol): Promise<void> {
+    await this.bindingContext.unbind(typeSymbol);
   }
 
-  isBound(typedSymbol: TypedSymbol<unknown>): boolean {
-    return this.bindingContext.isBound(typedSymbol);
+  isBound(typeSymbol: AnyTypeSymbol): boolean {
+    return this.bindingContext.isBound(typeSymbol);
   }
 }
 

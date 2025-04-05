@@ -203,21 +203,21 @@ await debugLoggerWire.apply(container);
 
 ## Core Interfaces
 
-### TypeWireDefinition<T>
+### TypeWire<T>
 
 The central interface defining how to create and manage an instance of type `T`:
 
 ```typescript
-interface TypeWireDefinition<T> {
-  readonly type: TypedSymbol<T>;
+interface TypeWire<T> {
+  readonly type: TypeSymbol<T>;
   readonly scope?: string;
   readonly creator: Creator<T>;
   
   apply(binder: BindingContext): Promise<void>;
   getInstance(resolver: ResolutionContext): T;
   getInstanceAsync(resolver: ResolutionContext): Promise<T>;
-  withScope(scope: string): TypeWireDefinition<T>;
-  withCreator(create: CreatorDecorator<T>): TypeWireDefinition<T>;
+  withScope(scope: string): TypeWire<T>;
+  withCreator(create: CreatorDecorator<T>): TypeWire<T>;
 }
 ```
 
@@ -244,6 +244,95 @@ interface BindingContext {
 }
 ```
 
+### TypeWireGroup
+
+A group of TypeWire instances that can be managed together. This interface extends `Applicable`, allowing you to apply all wires in the group at once.
+
+```typescript
+interface TypeWireGroup<T> extends Applicable {
+  /**
+   * The array of TypeWire instances in this group.
+   */
+  wires: TypeWire<T>[];
+}
+```
+
+The library provides a standard implementation through `StandardTypeWireGroup`:
+
+```typescript
+class StandardTypeWireGroup<T> implements TypeWireGroup<T> {
+  constructor(readonly wires: TypeWire<T>[]) {}
+
+  async apply(binder: BindingContext) {
+    for (const wire of this.wires) {
+      await wire.apply(binder);
+    }
+  }
+}
+```
+
+You can create groups of wires using `typeWireGroupOf`:
+
+```typescript
+// Define a base type for your components
+interface Service {
+  start(): Promise<void>;
+}
+
+// Create typed wires for each service
+const DatabaseServiceWire = typeWireOf({
+  token: 'DatabaseService',
+  creator: () => new DatabaseService()
+});
+
+const CacheServiceWire = typeWireOf({
+  token: 'CacheService',
+  creator: () => new CacheService()
+});
+
+// Create a group of service wires
+const serviceWires = typeWireGroupOf([
+  DatabaseServiceWire,
+  CacheServiceWire
+]);
+
+// Apply all wires in the group at once
+await serviceWires.apply(container);
+```
+
+You can also combine multiple groups using `combineWireGroups`:
+
+```typescript
+// Define your wire groups in separate files
+// core.wires.ts
+export const CoreWires = typeWireGroupOf([
+  UserServiceWire,
+  AuthServiceWire
+]);
+
+// feature.wires.ts
+export const FeatureWires = typeWireGroupOf([
+  FeatureServiceWire,
+  FeatureControllerWire
+]);
+
+// Combine them in your app setup
+const allWires = combineWireGroups([
+  CoreWires,
+  FeatureWires
+]);
+
+// Apply all wires at once
+await allWires.apply(container);
+```
+
+The `TypeWireGroup` interface provides several benefits:
+1. **Type Safety**: All wires in the group must create instances of the same type
+2. **Convenience**: Apply all wires in a group with a single call
+3. **Organization**: Group related wires together for better code organization
+4. **Composition**: Combine multiple groups into larger groups as needed
+5. **Debugging**: The standard implementation makes it easy to debug wire groups
+
 ## Error Handling
 
 TypeWire provides clear error messages to help with debugging dependency issues. The error messages follow this format:
@@ -267,6 +356,10 @@ const container = new TypeWireContainer({
   numberOfPathsToPrint: 5 // Limit path length in error messages
 });
 ```
+
+## Ecosystem Comparison
+
+For a detailed comparison of TypeWire with other DI solutions, including bundle size comparisons and key differentiators, see our [Ecosystem Comparison](docs/ecosystem-comparison.md) documentation.
 
 ## License
 

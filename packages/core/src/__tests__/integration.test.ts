@@ -59,13 +59,13 @@ describe("TypeWireTS Integration", () => {
     const serviceBProvider = typeWireOf<ServiceB>({
       token: "serviceB",
       creator: (resolver) =>
-        new ServiceBImpl(serviceAProvider.getInstance(resolver)),
+        new ServiceBImpl(serviceAProvider.getInstanceSync(resolver)),
     });
 
     const serviceCProvider = typeWireOf<ServiceC>({
       token: "serviceC",
       creator: (resolver) =>
-        new ServiceCImpl(serviceBProvider.getInstance(resolver)),
+        new ServiceCImpl(serviceBProvider.getInstanceSync(resolver)),
     });
 
     // Act
@@ -73,7 +73,7 @@ describe("TypeWireTS Integration", () => {
     await serviceBProvider.apply(container);
     await serviceCProvider.apply(container);
 
-    const serviceC = serviceCProvider.getInstance(container);
+    const serviceC = serviceCProvider.getInstanceSync(container);
 
     // Assert
     expect(serviceC.getName()).toBe("ServiceC");
@@ -89,7 +89,7 @@ describe("TypeWireTS Integration", () => {
       token: "serviceA",
       creator: (resolver) => {
         // This creates a circular dependency
-        serviceCProvider.getInstance(resolver);
+        serviceCProvider.getInstanceSync(resolver);
         return new ServiceAImpl();
       },
     });
@@ -97,23 +97,23 @@ describe("TypeWireTS Integration", () => {
     const serviceBProvider = typeWireOf<ServiceB>({
       token: "serviceB",
       creator: (resolver) =>
-        new ServiceBImpl(serviceAProvider.getInstance(resolver)),
+        new ServiceBImpl(serviceAProvider.getInstanceSync(resolver)),
     });
 
     const serviceCProvider = typeWireOf<ServiceC>({
       token: "serviceC",
       creator: (resolver) =>
-        new ServiceCImpl(serviceBProvider.getInstance(resolver)),
+        new ServiceCImpl(serviceBProvider.getInstanceSync(resolver)),
     });
 
     // Act & Assert
     await serviceAProvider.apply(container);
     await serviceBProvider.apply(container);
     await serviceCProvider.apply(container);
-    expect(() => serviceCProvider.getInstance(container)).toThrow(
+    expect(() => serviceCProvider.getInstanceSync(container)).toThrow(
       expect.objectContaining({
-        reason: "CircularDependency"
-      })
+        reason: "CircularDependency",
+      }),
     );
   });
 
@@ -132,7 +132,7 @@ describe("TypeWireTS Integration", () => {
     const serviceBProvider = typeWireOf<ServiceB>({
       token: "serviceB",
       creator: async (resolver) => {
-        const serviceA = await resolver.getAsync(serviceAProvider.type);
+        const serviceA = await resolver.get(serviceAProvider.type);
         return new ServiceBImpl(serviceA);
       },
     });
@@ -141,7 +141,7 @@ describe("TypeWireTS Integration", () => {
     await serviceAProvider.apply(container);
     await serviceBProvider.apply(container);
 
-    const serviceB = await serviceBProvider.getInstanceAsync(container);
+    const serviceB = await serviceBProvider.getInstance(container);
 
     // Assert
     expect(serviceB.getName()).toBe("ServiceB");
