@@ -122,12 +122,12 @@ While decorators are popular in other DI solutions, we chose not to use them bec
 
 ### Why Separate Creation from Resolution?
 
-TypeWire separates the definition of how to create a dependency (TypeWireDefinition) from the actual resolution (ResolutionContext):
+TypeWire separates the definition of how to create a dependency (TypeWire) from the actual resolution (ResolutionContext):
 
 - Clearer separation of concerns
 - More flexible composition possibilities
 - Better testability as each aspect can be tested independently
-- Easier to adapt to different container implementations 
+- Easier to adapt to different container implementations
 
 ## Addressing Common DI Criticisms
 
@@ -165,4 +165,39 @@ Dependency Injection (DI) often faces criticism for being "over-engineering" or 
 - Clear guidance on when to use DI
 - Ability to start simple and add complexity as needed
 
-The key insight is that DI isn't about adding complexity - it's about managing complexity that already exists in your application. TypeWire provides the tools to handle this complexity without introducing unnecessary overhead. 
+The key insight is that DI isn't about adding complexity - it's about managing complexity that already exists in your application. TypeWire provides the tools to handle this complexity without introducing unnecessary overhead.
+
+## Working with Wires, Not Containers
+
+TypeWire is designed to work with wires rather than containers. This approach has several benefits:
+
+1. **Container Independence**: Wires can be used with any container that implements the `BindingContext` and `ResolutionContext` interfaces.
+2. **Better Organization**: Wires can be grouped together using `TypeWireGroup` and managed as a unit.
+3. **Type Safety**: Wires provide compile-time type safety without runtime overhead.
+4. **Testability**: Wires can be easily tested in isolation or in groups.
+
+For example, instead of working directly with the container:
+
+```typescript
+// ❌ Working with container directly
+const container = new TypeWireContainer();
+for (const wire of wires) {
+  await wire.apply(container);
+}
+const instance = await container.get(wire.type);
+```
+
+We work with wires:
+
+```typescript
+// ✅ Working with wires
+const wireGroup = typeWireGroupOf(wires);
+await wireGroup.apply(container);
+const instance = await wire.getInstance(container);
+```
+
+This approach makes it easier to:
+- Switch between different container implementations
+- Test components in isolation
+- Organize and manage dependencies
+- Maintain type safety

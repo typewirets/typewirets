@@ -2,12 +2,21 @@
 
 This document provides an objective comparison between TypeWire and other dependency injection solutions for TypeScript. The goal is to help developers understand the trade-offs and choose the right tool for their specific needs.
 
+## Bundle Size Comparison
+
+| Library     | Minified | Gzipped |
+|-------------|----------|---------|
+| TypeWire    | 4.9KB    | 1.6KB   |
+| InversifyJS | 15KB     | 5KB     |
+| tsyringe    | 6KB      | 2.5KB   |
+| Awilix      | 8KB      | 3KB     |
+
 ## Comparison Table
 
 | Feature | TypeWire | InversifyJS | tsyringe | Angular DI | NestJS |
 |---------|----------|-------------|----------|------------|--------|
-| **Type Safety** | Strong (TypedSymbol) | Strong | Strong | Strong | Strong |
-| **Bundle Size** | Very Small (<2KB) | Medium (~9KB) | Small (~4KB) | Large (part of Angular) | Large (part of NestJS) |
+| **Type Safety** | Strong (TypeSymbol) | Strong | Strong | Strong | Strong |
+| **Bundle Size** | 1.6KB gzipped | 5KB gzipped | 2.5KB gzipped | Large (part of Angular) | Large (part of NestJS) |
 | **Decorator Usage** | None | Heavy | Heavy | Heavy | Heavy |
 | **Container Required** | Optional | Required | Required | Required | Required |
 | **Async Resolution** | Built-in | Requires plugin | No | No | Built-in |

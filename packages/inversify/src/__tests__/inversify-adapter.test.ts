@@ -1,6 +1,6 @@
 import { describe, test, expect, beforeEach } from "vitest";
 import { Container } from "inversify";
-import { typeWireOf, type TypeWireDefinition } from "@typewirets/core";
+import { typeWireOf, type TypeWire } from "@typewirets/core";
 import {
   adaptToResolutionContext,
   adaptToBindingContext,
@@ -28,9 +28,9 @@ class UserService {
 describe("Inversify Adapter", () => {
   let container: Container;
   let inversifyAdapter: InversifyAdapter;
-  let loggerWire: TypeWireDefinition<Logger>;
-  let dbWire: TypeWireDefinition<Database>;
-  let userServiceWire: TypeWireDefinition<UserService>;
+  let loggerWire: TypeWire<Logger>;
+  let dbWire: TypeWire<Database>;
+  let userServiceWire: TypeWire<UserService>;
 
   beforeEach(() => {
     container = new Container();
@@ -44,13 +44,16 @@ describe("Inversify Adapter", () => {
 
     dbWire = typeWireOf({
       token: "Database",
-      creator: (ctx) => new Database(loggerWire.getInstance(ctx)),
+      creator: (ctx) => new Database(loggerWire.getInstanceSync(ctx)),
     });
 
     userServiceWire = typeWireOf({
       token: "UserService",
       creator: (ctx) =>
-        new UserService(dbWire.getInstance(ctx), loggerWire.getInstance(ctx)),
+        new UserService(
+          dbWire.getInstanceSync(ctx),
+          loggerWire.getInstanceSync(ctx),
+        ),
     });
   });
 
@@ -63,7 +66,7 @@ describe("Inversify Adapter", () => {
     await loggerWire.apply(bindingContext);
 
     // Verify it can resolve using the TypeWire API
-    const logger = loggerWire.getInstance(resolutionContext);
+    const logger = await loggerWire.getInstance(resolutionContext);
     expect(logger).toBeInstanceOf(Logger);
   });
 
@@ -79,7 +82,7 @@ describe("Inversify Adapter", () => {
 
     // Verify resolution using TypeWire API
     const resolutionContext = adaptToResolutionContext(container);
-    const logger = loggerWire.getInstance(resolutionContext);
+    const logger = await loggerWire.getInstance(resolutionContext);
     expect(logger).toBeInstanceOf(Logger);
   });
 
@@ -88,7 +91,7 @@ describe("Inversify Adapter", () => {
     await loggerWire.apply(inversifyAdapter);
 
     // Verify resolution using TypeWire API
-    const logger = loggerWire.getInstance(inversifyAdapter);
+    const logger = await loggerWire.getInstance(inversifyAdapter);
     expect(logger).toBeInstanceOf(Logger);
   });
 
@@ -100,7 +103,7 @@ describe("Inversify Adapter", () => {
     await loggerWire.apply(adapter);
 
     // Verify resolution using TypeWire API
-    const logger = loggerWire.getInstance(adapter);
+    const logger = await loggerWire.getInstance(adapter);
     expect(logger).toBeInstanceOf(Logger);
   });
 
@@ -112,8 +115,8 @@ describe("Inversify Adapter", () => {
     await singletonLoggerWire.apply(inversifyAdapter);
 
     // Get the instance twice
-    const logger1 = singletonLoggerWire.getInstance(inversifyAdapter);
-    const logger2 = singletonLoggerWire.getInstance(inversifyAdapter);
+    const logger1 = await singletonLoggerWire.getInstance(inversifyAdapter);
+    const logger2 = await singletonLoggerWire.getInstance(inversifyAdapter);
 
     // Should be the same instance
     expect(logger1).toBe(logger2);
@@ -125,8 +128,8 @@ describe("Inversify Adapter", () => {
     // This will unbind singletonLoggerWire as it uses the same symbol
     await transientDbWire.apply(inversifyAdapter);
 
-    const db1 = transientDbWire.getInstance(inversifyAdapter);
-    const db2 = transientDbWire.getInstance(inversifyAdapter);
+    const db1 = await transientDbWire.getInstance(inversifyAdapter);
+    const db2 = await transientDbWire.getInstance(inversifyAdapter);
 
     // Should be different instances
     expect(db1).not.toBe(db2);
@@ -152,7 +155,7 @@ describe("Inversify Adapter", () => {
     expect(inversifyAdapter.isBound(loggerWire.type)).toBe(false);
 
     // Should throw when trying to resolve
-    expect(() => loggerWire.getInstance(inversifyAdapter)).toThrow();
+    expect(() => loggerWire.getInstance(inversifyAdapter)).rejects.toThrow();
   });
 
   test("should handle async resolution", async () => {
@@ -169,7 +172,7 @@ describe("Inversify Adapter", () => {
     await asyncLoggerWire.apply(inversifyAdapter);
 
     // Resolve asynchronously using TypeWire API
-    const logger = await asyncLoggerWire.getInstanceAsync(inversifyAdapter);
+    const logger = await asyncLoggerWire.getInstance(inversifyAdapter);
     expect(logger).toBeInstanceOf(Logger);
   });
 
@@ -180,7 +183,7 @@ describe("Inversify Adapter", () => {
     await userServiceWire.apply(inversifyAdapter);
 
     // Resolve the service with dependencies
-    const userService = userServiceWire.getInstance(inversifyAdapter);
+    const userService = await userServiceWire.getInstance(inversifyAdapter);
     expect(userService).toBeInstanceOf(UserService);
   });
 });

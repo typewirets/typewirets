@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { TypeWireContainer, typeWireOf, typedSymbolOf } from "../index";
+import { TypeWireContainer, typeWireOf, typeSymbolOf } from "../index";
 
 // Test interfaces and classes
 interface TestService {
@@ -43,7 +43,7 @@ describe("TypeWireContainer", () => {
 
       // Act
       await testServiceWire.apply(container);
-      const service = testServiceWire.getInstance(container);
+      const service = testServiceWire.getInstanceSync(container);
 
       // Assert
       expect(service).toBeInstanceOf(TestServiceImpl);
@@ -52,13 +52,13 @@ describe("TypeWireContainer", () => {
 
     it("should throw when getting an unbound provider", () => {
       // Arrange
-      const symbol = typedSymbolOf<TestService>("notBound");
+      const symbol = typeSymbolOf<TestService>("notBound");
 
       // Act & Assert
-      expect(() => container.get(symbol)).toThrow(
+      expect(() => container.getSync(symbol)).toThrow(
         expect.objectContaining({
-          reason: "BindingNotFound"
-        })
+          reason: "BindingNotFound",
+        }),
       );
     });
 
@@ -72,7 +72,7 @@ describe("TypeWireContainer", () => {
       const dependentServiceWire = typeWireOf<DependentService>({
         token: "dependentService",
         creator: (resolver) => {
-          const testService = resolver.get(testServiceWire.type);
+          const testService = resolver.getSync(testServiceWire.type);
           return new DependentServiceImpl(testService);
         },
       });
@@ -80,7 +80,7 @@ describe("TypeWireContainer", () => {
       // Act
       await testServiceWire.apply(container);
       await dependentServiceWire.apply(container);
-      const service = dependentServiceWire.getInstance(container);
+      const service = dependentServiceWire.getInstanceSync(container);
 
       // Assert
       expect(service).toBeInstanceOf(DependentServiceImpl);
@@ -98,8 +98,8 @@ describe("TypeWireContainer", () => {
 
       // Act
       await testServiceWire.apply(container);
-      const service1 = container.get(testServiceWire.type);
-      const service2 = container.get(testServiceWire.type);
+      const service1 = container.getSync(testServiceWire.type);
+      const service2 = container.getSync(testServiceWire.type);
 
       // Assert
       expect(service1).toBe(service2); // Same instance
@@ -115,8 +115,8 @@ describe("TypeWireContainer", () => {
 
       // Act
       await testServiceWire.apply(container);
-      const service1 = container.get(testServiceWire.type);
-      const service2 = container.get(testServiceWire.type);
+      const service1 = container.getSync(testServiceWire.type);
+      const service2 = container.getSync(testServiceWire.type);
 
       // Assert
       expect(service1).not.toBe(service2); // Different instances
@@ -137,7 +137,7 @@ describe("TypeWireContainer", () => {
 
       // Act
       await asyncServiceWire.apply(container);
-      const service = await container.getAsync(asyncServiceWire.type);
+      const service = await container.get(asyncServiceWire.type);
 
       // Assert
       expect(service).toBeInstanceOf(TestServiceImpl);
@@ -158,10 +158,10 @@ describe("TypeWireContainer", () => {
       await asyncServiceWire.apply(container);
 
       // Assert
-      expect(() => asyncServiceWire.getInstance(container)).toThrow(
+      expect(() => asyncServiceWire.getInstanceSync(container)).toThrow(
         expect.objectContaining({
-          reason: "AsyncOnlyBinding"
-        })
+          reason: "AsyncOnlyBinding",
+        }),
       );
     });
 
@@ -179,8 +179,8 @@ describe("TypeWireContainer", () => {
 
       // Act
       await asyncServiceWire.apply(container);
-      const service1 = await container.getAsync(asyncServiceWire.type);
-      const service2 = await container.getAsync(asyncServiceWire.type);
+      const service1 = await container.get(asyncServiceWire.type);
+      const service2 = await container.get(asyncServiceWire.type);
 
       // Assert
       expect(service1).toBe(service2); // Same instance
@@ -204,10 +204,10 @@ describe("TypeWireContainer", () => {
 
       // Assert
       expect(container.isBound(testServiceWire.type)).toBe(false);
-      expect(() => container.get(testServiceWire.type)).toThrow(
+      expect(() => container.getSync(testServiceWire.type)).toThrow(
         expect.objectContaining({
-          reason: "BindingNotFound"
-        })
+          reason: "BindingNotFound",
+        }),
       );
     });
 
@@ -220,12 +220,12 @@ describe("TypeWireContainer", () => {
 
       // Act - Get instance to cache it
       await testServiceWire.apply(container);
-      const service1 = container.get(testServiceWire.type);
+      const service1 = container.getSync(testServiceWire.type);
 
       // Unbind and rebind
       container.unbind(testServiceWire.type);
       await testServiceWire.apply(container);
-      const service2 = container.get(testServiceWire.type);
+      const service2 = container.getSync(testServiceWire.type);
 
       // Assert
       expect(service1).not.toBe(service2); // Different instances
@@ -242,7 +242,7 @@ describe("TypeWireContainer", () => {
 
       // Act
       await testServiceWire.apply(container);
-      const service = testServiceWire.getInstance(container);
+      const service = testServiceWire.getInstanceSync(container);
 
       // Assert
       expect(service).toBeInstanceOf(TestServiceImpl);
@@ -261,7 +261,7 @@ describe("TypeWireContainer", () => {
 
       // Act
       await asyncServiceWire.apply(container);
-      const service = await asyncServiceWire.getInstanceAsync(container);
+      const service = await asyncServiceWire.getInstance(container);
 
       // Assert
       expect(service).toBeInstanceOf(TestServiceImpl);
@@ -287,13 +287,13 @@ describe("TypeWireContainer", () => {
 
       // Verify behavior
       await singletonWire.apply(container);
-      const singleton1 = container.get(singletonWire.type);
-      const singleton2 = container.get(singletonWire.type);
+      const singleton1 = container.getSync(singletonWire.type);
+      const singleton2 = container.getSync(singletonWire.type);
       expect(singleton1).toBe(singleton2); // Same instance
 
       await transientWire.apply(container);
-      const transient1 = container.get(transientWire.type);
-      const transient2 = container.get(transientWire.type);
+      const transient1 = container.getSync(transientWire.type);
+      const transient2 = container.getSync(transientWire.type);
       expect(transient1).not.toBe(transient2); // Different instances
     });
 
@@ -315,12 +315,12 @@ describe("TypeWireContainer", () => {
 
       // Verify behavior
       await originalWire.apply(container);
-      const original = container.get(originalWire.type);
+      const original = container.getSync(originalWire.type);
       expect(original.getValue()).toBe("original");
 
       container.unbind(originalWire.type);
       await newWire.apply(container);
-      const modified = container.get(newWire.type);
+      const modified = container.getSync(newWire.type);
       expect(modified.getValue()).toBe("modified");
     });
   });

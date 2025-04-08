@@ -10,7 +10,7 @@ TypeWire is a lightweight, container-agnostic dependency injection library for T
 
 ### 1. True Type Safety Without Runtime Penalty
 
-Most TypeScript DI solutions either sacrifice type safety or require extensive runtime type information. TypeWire achieves compile-time type safety through its `TypedSymbol` approach without needing runtime reflection or decorators, resulting in:
+Most TypeScript DI solutions either sacrifice type safety or require extensive runtime type information. TypeWire achieves compile-time type safety through its `TypeSymbol` approach without needing runtime reflection or decorators, resulting in:
 
 - Zero reflection-based runtime overhead
 - Smaller bundle size
