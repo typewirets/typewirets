@@ -1,0 +1,58 @@
+{
+  "name": "@typewirets/react-trpc-fastify",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start:server": "tsx watch ./src/server-main.ts",
+    "start:client": "vite",
+    "start": "pnpm --filter '@typewirets/react-trpc-fastify' --parallel '/^start:.*/'",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "author": "Rex Kim",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/typewirets/typewirets.git",
+    "directory": "recipes/react-trpc-fastify"
+  },
+  "bugs": {
+    "url": "https://github.com/typewirets/typewirets/issues"
+  },
+  "dependencies": {
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/cors": "^11.0.1",
+    "@fastify/session": "^11.1.0",
+    "@tanstack/react-form": "^1.3.2",
+    "@tanstack/react-query": "^5.72.1",
+    "@trpc/client": "^11.0.4",
+    "@trpc/react-query": "^11.0.4",
+    "@trpc/server": "^11.0.4",
+    "@trpc/tanstack-react-query": "^11.0.4",
+    "@typewirets/core": "workspace:*",
+    "arktype": "^2.1.19",
+    "fastify": "^5.2.2",
+    "jsonc-parser": "^3.3.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "sonner": "^2.0.3",
+    "tailwindcss": "^4.1.3",
+    "zod": "^3.24.2",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@standard-schema/spec": "^1.0.0",
+    "@tailwindcss/vite": "^4.1.3",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@typewirets/typescript-config": "workspace:*",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tsx": "^4.19.3",
+    "typescript": "^5.3.3",
+    "vite": "^6.2.5",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^3.0.8"
+  }
+}

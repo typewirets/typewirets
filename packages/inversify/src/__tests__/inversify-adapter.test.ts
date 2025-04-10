@@ -1,13 +1,7 @@
 import { describe, test, expect, beforeEach } from "vitest";
 import { Container } from "inversify";
 import { typeWireOf, type TypeWire } from "@typewirets/core";
-import {
-  adaptToResolutionContext,
-  adaptToBindingContext,
-  createInversifyAdapter,
-  InversifyAdapter,
-  adoptScope,
-} from "../index";
+import { InversifyAdapter, createInversifyAdapter, adoptScope } from "../index";
 
 // Mock classes for testing
 class Logger {
@@ -55,35 +49,6 @@ describe("Inversify Adapter", () => {
           loggerWire.getInstanceSync(ctx),
         ),
     });
-  });
-
-  test("adaptToResolutionContext should provide a valid ResolutionContext", async () => {
-    // Create the context adapter
-    const bindingContext = adaptToBindingContext(container);
-    const resolutionContext = adaptToResolutionContext(container);
-
-    // Apply definition using the TypeWire API
-    await loggerWire.apply(bindingContext);
-
-    // Verify it can resolve using the TypeWire API
-    const logger = await loggerWire.getInstance(resolutionContext);
-    expect(logger).toBeInstanceOf(Logger);
-  });
-
-  test("adaptToBindingContext should provide a valid BindingContext", async () => {
-    // Create the binding context adapter
-    const context = adaptToBindingContext(container);
-
-    // Apply definition using TypeWire API
-    await loggerWire.apply(context);
-
-    // Verify binding using TypeWire API through isBound check
-    expect(context.isBound(loggerWire.type)).toBe(true);
-
-    // Verify resolution using TypeWire API
-    const resolutionContext = adaptToResolutionContext(container);
-    const logger = await loggerWire.getInstance(resolutionContext);
-    expect(logger).toBeInstanceOf(Logger);
   });
 
   test("InversifyAdapter should implement both contexts", async () => {
@@ -185,5 +150,103 @@ describe("Inversify Adapter", () => {
     // Resolve the service with dependencies
     const userService = await userServiceWire.getInstance(inversifyAdapter);
     expect(userService).toBeInstanceOf(UserService);
+  });
+
+  test("hasInstance should return false for unloaded dependencies", () => {
+    // Register but don't instantiate
+    loggerWire.apply(inversifyAdapter);
+
+    // Should not be loaded yet
+    expect(inversifyAdapter.hasInstance(loggerWire)).toBe(false);
+  });
+
+  test("hasInstance should return true after resolution for singletons", async () => {
+    // Create a singleton provider
+    const singletonLoggerWire = loggerWire.withScope("singleton");
+
+    // Register
+    await singletonLoggerWire.apply(inversifyAdapter);
+
+    // Not loaded yet
+    expect(inversifyAdapter.hasInstance(singletonLoggerWire)).toBe(false);
+
+    // Instantiate
+    await singletonLoggerWire.getInstance(inversifyAdapter);
+
+    // Should be loaded now
+    expect(inversifyAdapter.hasInstance(singletonLoggerWire)).toBe(true);
+  });
+
+  test("hasInstance should always return false for transient dependencies", async () => {
+    // Create a transient provider
+    const transientLoggerWire = loggerWire.withScope("transient");
+
+    // Register
+    await transientLoggerWire.apply(inversifyAdapter);
+
+    // Not loaded yet
+    expect(inversifyAdapter.hasInstance(transientLoggerWire)).toBe(false);
+
+    // Instantiate
+    await transientLoggerWire.getInstance(inversifyAdapter);
+
+    // Should still not be considered loaded (transient)
+    expect(inversifyAdapter.hasInstance(transientLoggerWire)).toBe(false);
+  });
+
+  test("findInstance should return undefined for uninstantiated dependencies", () => {
+    // Register but don't instantiate
+    loggerWire.apply(inversifyAdapter);
+
+    // Should return undefined
+    expect(inversifyAdapter.findInstance(loggerWire)).toBeUndefined();
+  });
+
+  test("findInstance should return instance for instantiated singletons", async () => {
+    // Create a singleton provider
+    const singletonLoggerWire = loggerWire.withScope("singleton");
+
+    // Register
+    await singletonLoggerWire.apply(inversifyAdapter);
+
+    // Instantiate
+    const original = await singletonLoggerWire.getInstance(inversifyAdapter);
+
+    // Should return the same instance
+    const found = inversifyAdapter.findInstance(singletonLoggerWire);
+    expect(found).toBe(original);
+  });
+
+  test("error handling - getSync should throw for unbound dependencies", () => {
+    // Try to get an unbound dependency
+    expect(() => inversifyAdapter.getSync(loggerWire.type)).toThrow();
+  });
+
+  test("error handling - get should throw for unbound dependencies", async () => {
+    // Try to get an unbound dependency
+    await expect(inversifyAdapter.get(loggerWire.type)).rejects.toThrow();
+  });
+
+  test("multiple binds should replace previous bindings", async () => {
+    // Create two different logger implementations
+    const debugLoggerWire = typeWireOf({
+      token: "Logger",
+      creator: () => {
+        const logger = new Logger();
+        // Add some debug property to distinguish it
+        Object.assign(logger, { isDebug: true });
+        return logger;
+      },
+    });
+
+    // Register the first logger
+    await loggerWire.apply(inversifyAdapter);
+    const logger1 = await loggerWire.getInstance(inversifyAdapter);
+    expect((logger1 as any).isDebug).toBeUndefined();
+
+    // Register the second logger with the same symbol
+    await debugLoggerWire.apply(inversifyAdapter);
+    const logger2 = await debugLoggerWire.getInstance(inversifyAdapter);
+    expect((logger2 as any).isDebug).toBe(true);
   });
 });

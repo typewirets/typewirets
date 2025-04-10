@@ -1,5 +1,6 @@
 {
   "name": "@typewirets/typewirets",
+  "type": "module",
   "private": true,
   "scripts": {
     "build": "turbo run build",

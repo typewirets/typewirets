@@ -1,4 +1,30 @@
 /**
+ * TypeWire Core Library
+ *
+ * A lightweight, container-agnostic dependency injection library for TypeScript that provides
+ * strong typing with minimal overhead. This library enables type-safe dependency injection
+ * through a functional API that emphasizes immutability and composition.
+ *
+ * Key Features:
+ * - Strong typing with TypeScript
+ * - Container-agnostic design
+ * - Immutable definitions
+ * - Async support
+ * - Circular dependency detection
+ * - Smart scoping (singleton, transient)
+ *
+ * The library is organized around several core concepts:
+ * 1. TypeSymbol - A typed wrapper around JavaScript's Symbol for type-safe identification
+ * 2. TypeWire - The main interface for defining how to create and manage instances
+ * 3. TypeWireGroup - A collection of TypeWire instances that can be managed together
+ * 4. ResolutionContext - Interface for resolving dependencies
+ * 5. BindingContext - Interface for registering dependencies
+ * 6. TypeWireContainer - Default implementation of both ResolutionContext and BindingContext
+ *
+ * @packageDocumentation
+ */
+
+/**
  * A typed wrapper around JavaScript's Symbol that preserves type information
  * at compile time while providing unique identification at runtime.
  *
@@ -58,13 +84,15 @@ export type AnyTypeSymbol = TypeSymbol<AnyType>;
  */
 const ScopeSingleton = "singleton";
 
+const UnknownTypeSymbol = "unknown";
+
 /**
  * Gets the description of a type symbol.
  * @param typeSymbol - The type symbol to get the description for
  * @returns The description of the symbol, or "unknown" if none exists
  */
 function getDescription(typeSymbol: TypeSymbol<unknown>): string {
-  return typeSymbol.symbol.description ?? "unknown";
+  return typeSymbol.symbol.description ?? UnknownTypeSymbol;
 }
 
 /**
@@ -224,9 +252,6 @@ export type InferWireType<W> = W extends TypeWire<infer T> ? T : never;
  * @template T The type of instances created by the wires in this group
  */
 export interface TypeWireGroup<T> extends Applicable {
-  /**
-   * The array of TypeWire instances in this group.
-   */
   wires: TypeWire<T>[];
 
   /**
@@ -282,6 +307,8 @@ export interface TypeWireGroup<T> extends Applicable {
    * ```
    */
   getAllInstancesSync(resolver: ResolutionContext): T[];
+
+  withExtraWires(extraWires: TypeWire<T>[]): TypeWireGroup<T>;
 }
 
 /**
@@ -295,7 +322,7 @@ export class StandardTypeWireGroup<T> implements TypeWireGroup<T> {
   /**
    * Creates a new StandardTypeWireGroup with the given wires.
    *
-   * @param wires The TypeWire instances to include in this group
+   * @param #wires The TypeWire instances to include in this group
    */
   constructor(readonly wires: TypeWire<T>[]) {}
 
@@ -307,6 +334,10 @@ export class StandardTypeWireGroup<T> implements TypeWireGroup<T> {
 
   getAllInstancesSync(resolver: ResolutionContext): T[] {
     return this.wires.map((wire) => wire.getInstanceSync(resolver));
+  }
+
+  withExtraWires(extraWires: TypeWire<T>[]): TypeWireGroup<T> {
+    return new StandardTypeWireGroup([this.wires, extraWires].flat());
   }
 
   /**
@@ -451,8 +482,8 @@ export class StandardTypeWire<T> implements TypeWire<T> {
     readonly type: TypeSymbol<T>,
     readonly creator: Creator<T>,
     readonly scope?: string,
+    readonly imports?: AnyTypeWire[],
   ) {}
-
   /**
    * Registers this provider with a dependency binder.
    *
@@ -460,6 +491,14 @@ export class StandardTypeWire<T> implements TypeWire<T> {
    * @returns A promise that resolves when registration is complete
    */
   async apply(binder: BindingContext): Promise<void> {
+    if (this.imports) {
+      for (const dep of this.imports) {
+        if (!binder.isBound(dep.type)) {
+          await dep.apply(binder);
+        }
+      }
+    }
+
     if (binder.isBound(this.type)) {
       binder.unbind(this.type);
     }
@@ -496,7 +535,7 @@ export class StandardTypeWire<T> implements TypeWire<T> {
    * @returns A new provider with the updated scope
    */
   withScope(scope: string): TypeWire<T> {
-    return new StandardTypeWire(this.type, this.creator, scope);
+    return new StandardTypeWire(this.type, this.creator, scope, this.imports);
   }
 
   /**
@@ -511,6 +550,7 @@ export class StandardTypeWire<T> implements TypeWire<T> {
       this.type,
       (ctx) => create(ctx, this.creator),
       this.scope,
+      this.imports,
     );
   }
 }
@@ -542,20 +582,33 @@ export function typeSymbolOf<T>(token: string): TypeSymbol<T> {
   return { symbol: Symbol(token) };
 }
 
+type ImportArrayOrObject = AnyTypeWire[] | Record<string, AnyTypeWire>;
+
+type ResolvedImports<D> = {
+  [K in keyof D]: D[K] extends TypeWire<infer U> ? U : never;
+};
+
 /**
  * Options for creating a provider.
  * @template T The type of instance the provider will create
  */
-export interface TypeWireOpts<T> {
+export interface TypeWireOpts<T, D extends ImportArrayOrObject> {
   /**
    * A string or symbol identifier for debugging purposes.
    */
   token: string | symbol;
 
+  imports?: D;
+
+  createWith?: (
+    imports: ResolvedImports<D>,
+    ctx: ResolutionContext,
+  ) => T | Promise<T>;
+
   /**
    * The creator function that creates instances of type T.
    */
-  creator: Creator<T>;
+  creator?: Creator<T>;
 
   /**
    * Optional scope that determines instance lifecycle.
@@ -571,21 +624,98 @@ export interface TypeWireOpts<T> {
  * @param opts Options for creating the provider
  * @returns A provider definition for type T
  */
-export function typeWireOf<T>(opts: TypeWireOpts<T>): TypeWire<T> {
-  const { token, creator, scope } = opts;
+export function typeWireOf<T, D extends ImportArrayOrObject = AnyType>(
+  opts: TypeWireOpts<T, D>,
+): TypeWire<T> {
+  const { token, imports, createWith, creator, scope } = opts;
   const typedSymbol =
     typeof token === "string" ? typeSymbolOf<T>(token) : { symbol: token };
-  return new StandardTypeWire(typedSymbol, creator, scope);
+
+  const defaultCreator = () => {
+    throw new Error(
+      `Not implemented yet. Please provide a creator or createWith for ${String(typedSymbol.symbol)}`,
+    );
+  };
+
+  if (createWith) {
+    let deps: AnyTypeWire[] | undefined;
+    if (imports) {
+      deps = [];
+      for (const key in imports) {
+        const wire = imports[key] as AnyTypeWire;
+        if (wire) {
+          deps.push(wire);
+        }
+      }
+    }
+
+    const autoCreator = async (ctx: ResolutionContext) => {
+      if (imports) {
+        let resolved: ResolvedImports<D>;
+        if (Array.isArray(imports)) {
+          resolved = [] as AnyType;
+        } else {
+          resolved = {} as AnyType;
+        }
+
+        for (const key in imports) {
+          const wire = imports[key] as AnyTypeWire;
+          if (wire) {
+            const instance = await wire.getInstance(ctx);
+            resolved[key] = instance;
+          }
+        }
+
+        return createWith(resolved, ctx);
+      }
+
+      return defaultCreator();
+    };
+
+    return new StandardTypeWire(typedSymbol, autoCreator, scope, deps);
+  }
+
+  return new StandardTypeWire(typedSymbol, creator ?? defaultCreator, scope);
 }
+
+/**
+ * Factory function type for creating monitor instances per resolution request.
+ * This allows for creating fresh, isolated monitor instances for each dependency
+ * resolution chain, preventing cross-talk between concurrent resolutions.
+ *
+ * @param opts The resolution request context information
+ * @returns A new monitor instance for this specific resolution request
+ */
+export type ResolutionRequestMonitorFactory = (
+  opts: ResolutionRequest,
+) => ResolutionRequestMonitor;
 
 /**
  * Options for configuring a TypeWire container.
  */
 export interface TypeWireContianerOpts {
-  /** Optional custom resolution monitor for tracking dependency resolution */
-  resolutionMonitor?: ResolutionMonitor;
   /** Optional limit on how many path items to display in error messages */
   numberOfPathsToPrint?: number;
+
+  /**
+   * Factory function to create resolution monitors.
+   * If not provided, the default CircularDependencyMonitor factory will be used.
+   */
+  resolutionRequestMonitorFactory?: ResolutionRequestMonitorFactory;
+}
+
+/**
+ * Default implementation of the monitor factory that creates a new CircularDependencyMonitor
+ * for each resolution request. This ensures each resolution chain gets its own
+ * isolated monitor instance.
+ *
+ * @param opts The resolution request context
+ * @returns A new CircularDependencyMonitor instance
+ */
+function defaultResolutionRequestMonitorFactory(
+  opts: ResolutionRequest,
+): ResolutionRequestMonitor {
+  return new CircularDependencyMonitor(opts);
 }
 
 /**
@@ -603,10 +733,34 @@ export type SyncAction<T> = () => T;
 export type AsyncAction<T> = () => T | Promise<T>;
 
 /**
- * Monitors dependency resolution to detect issues and collect information.
- * This interface allows for custom monitoring implementations.
+ * Represents a single resolution request context.
+ * This interface provides information about a specific dependency resolution chain,
+ * allowing monitors to track and manage resolution state per request instead of globally.
+ * Each resolution chain gets its own unique identifier to prevent cross-request interference.
  */
-export interface ResolutionMonitor {
+export interface ResolutionRequest {
+  /**
+   * A unique identifier for this specific resolution request/chain.
+   * Used to distinguish between concurrent resolution paths.
+   */
+  requestId: symbol;
+
+  /**
+   * Optional limit on how many path items to display in error messages.
+   * Controls the verbosity of resolution path reporting in error messages.
+   */
+  numberOfPathsToPrint?: number;
+}
+
+/**
+ * Monitors dependency resolution to detect issues and collect information for a single resolution request.
+ * Each monitor instance is tied to a specific resolution chain, allowing it to track dependencies
+ * and detect circular references within that isolated context. This per-request design prevents
+ * false positives when multiple concurrent resolutions occur.
+ *
+ * This interface allows for custom monitoring implementations with different detection strategies.
+ */
+export interface ResolutionRequestMonitor {
   /**
    * Monitors a synchronous dependency resolution.
    * @template T The type of the resolution result
@@ -632,10 +786,16 @@ export interface ResolutionMonitor {
 }
 
 /**
- * Tracks dependency resolution and detects circular dependencies.
- * This is the default implementation of ResolutionMonitor.
+ * Tracks dependency resolution and detects circular dependencies within a single resolution chain.
+ * This is the default implementation of ResolutionRequestMonitor.
+ *
+ * Each monitor instance is tied to a specific resolution chain/request and maintains its own
+ * independent tracking state. This isolation prevents false positives that would occur with
+ * a global monitor when concurrent resolutions happen for the same dependency.
  */
-export class CircularDependencyMonitor implements ResolutionMonitor {
+export class CircularDependencyMonitor implements ResolutionRequestMonitor {
+  private readonly requestId: symbol;
+
   /**
    * Set of symbols currently being resolved.
    */
@@ -656,8 +816,10 @@ export class CircularDependencyMonitor implements ResolutionMonitor {
    * @param opts Configuration options for the monitor
    */
   constructor(opts: {
+    requestId: symbol;
     numberOfPathsToPrint?: number;
   }) {
+    this.requestId = opts.requestId;
     this.numberOfPathsToPrint = opts.numberOfPathsToPrint;
   }
 
@@ -670,13 +832,8 @@ export class CircularDependencyMonitor implements ResolutionMonitor {
     this.resolutionStack.push(typeSymbol);
   }
 
-  /**
-   * Removes a type symbol from the resolution set and stack.
-   * @param typeSymbol The type symbol to remove
-   */
-  private remove(typeSymbol: TypeSymbol<unknown>) {
-    this.resolutionSet.delete(typeSymbol.symbol);
-    this.resolutionStack.pop();
+  private hasInStack(typeSymbol: TypeSymbol<unknown>): boolean {
+    return this.resolutionSet.has(typeSymbol.symbol);
   }
 
   /**
@@ -688,25 +845,26 @@ export class CircularDependencyMonitor implements ResolutionMonitor {
    * @throws Error if a circular dependency is detected
    */
   monitor<T>(typeSymbol: TypeSymbol<T>, action: SyncAction<T>): T {
-    if (this.resolutionSet.has(typeSymbol.symbol)) {
-      throw TypeWireError.circularDependency();
-    }
-
-    this.add(typeSymbol);
     try {
+      if (this.hasInStack(typeSymbol)) {
+        throw TypeWireError.circularDependency();
+      }
+
+      this.add(typeSymbol);
       return action();
     } catch (err) {
-      if (err instanceof TypeWireError && !err.message) {
-        err.message = getErrorMessage({
-          type: typeSymbol,
-          reason: err.reason,
-          paths: [...this.resolutionStack],
-          numberOfPathsToPrint: this.numberOfPathsToPrint,
-        });
+      if (err instanceof TypeWireError) {
+        err.requestId = this.requestId;
+        if (!err.message) {
+          err.message = getErrorMessage({
+            type: typeSymbol,
+            reason: err.reason,
+            stack: this.resolutionStack,
+            numberOfPathsToPrint: this.numberOfPathsToPrint,
+          });
+        }
       }
       throw err;
-    } finally {
-      this.remove(typeSymbol);
     }
   }
 
@@ -724,7 +882,7 @@ export class CircularDependencyMonitor implements ResolutionMonitor {
   ): Promise<T> {
     try {
       // Check for circular dependency
-      if (this.resolutionSet.has(typeSymbol.symbol)) {
+      if (this.hasInStack(typeSymbol)) {
         throw TypeWireError.circularDependency();
       }
 
@@ -734,28 +892,20 @@ export class CircularDependencyMonitor implements ResolutionMonitor {
       // Execute the resolution action
       return await action();
     } catch (err: unknown) {
-      if (err instanceof TypeWireError && !err.message) {
-        err.message = getErrorMessage({
-          type: typeSymbol,
-          reason: err.reason,
-          paths: [...this.resolutionStack],
-          numberOfPathsToPrint: this.numberOfPathsToPrint,
-        });
+      if (err instanceof TypeWireError) {
+        err.requestId = this.requestId;
+        if (!err.message) {
+          err.message = getErrorMessage({
+            type: typeSymbol,
+            reason: err.reason,
+            stack: this.resolutionStack,
+            numberOfPathsToPrint: this.numberOfPathsToPrint,
+          });
+        }
       }
 
       throw err;
-    } finally {
-      // Remove from resolution stack when done
-      this.remove(typeSymbol);
     }
-  }
-
-  /**
-   * Checks if the tracker is currently resolving any dependencies.
-   * @returns True if any dependencies are being resolved, false otherwise
-   */
-  isResolving(): boolean {
-    return this.resolutionStack.length > 0;
   }
 }
 
@@ -793,6 +943,12 @@ export class TypeWireError extends Error {
   public readonly reason: ErrorReason;
 
   /**
+   * The unique identifier of the resolution request that triggered this error.
+   * Used to correlate errors with specific resolution chains.
+   */
+  public requestId?: symbol;
+
+  /**
    * Creates a new TypeWireError.
    * @param reason - The reason for the error
    * @param message - Optional custom error message
@@ -808,6 +964,13 @@ export class TypeWireError extends Error {
       configurable: true,
     });
     this.reason = reason;
+
+    Object.defineProperty(this, "requestId", {
+      value: undefined,
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    });
   }
 
   /**
@@ -842,6 +1005,12 @@ export class TypeWireError extends Error {
  * Options for creating a TypeWire error.
  */
 export interface TypeWireErrorOpt {
+  /**
+   * The unique identifier for the resolution request that triggered the error.
+   * Used to correlate errors with specific resolution chains.
+   */
+  requestId?: symbol;
+
   /** The type symbol that failed to resolve */
   type: TypeSymbol<unknown>;
 
@@ -849,7 +1018,7 @@ export interface TypeWireErrorOpt {
   reason: ErrorReason;
 
   /** The resolution path that led to the error */
-  paths: TypeSymbol<unknown>[];
+  stack: TypeSymbol<unknown>[];
 
   /** Optional limit on how many path items to display in the error message */
   numberOfPathsToPrint?: number;
@@ -875,32 +1044,45 @@ function getInstruction(opts: TypeWireErrorOpt): string {
 
 /**
  * Formats the dependency resolution path for error messages.
- * @param paths The array of type symbols in the resolution path
+ *
+ * @param requestedType final requestedType. It is only present, if error is for circular dependency
+ * @param stack The array of type symbols in the resolution path
  * @param numberOfPathsToPrint Optional limit on how many path items to display
- * @returns An object containing the formatted path and any truncation prefix
+ * @returns {[]string} path fragments in string
  */
 function formatDependencyPath(
-  paths: TypeSymbol<unknown>[],
+  requestedType: TypeSymbol<unknown> | undefined,
+  stack: TypeSymbol<unknown>[],
   numberOfPathsToPrint?: number,
-): { prefix: string; formattedPath: string } {
-  const connector = " -> ";
-  let prefix = "";
-  let depsToPrint = [...paths];
-
-  if (
-    numberOfPathsToPrint !== undefined &&
-    depsToPrint.length > numberOfPathsToPrint
-  ) {
-    const size = depsToPrint.length;
-    const rest = size - numberOfPathsToPrint;
-    prefix = `truncated(${rest})... ${connector}`;
-    depsToPrint = depsToPrint.slice(size - numberOfPathsToPrint, size);
+): string[] {
+  let counts = 0;
+  const maxNumberOfPaths = numberOfPathsToPrint ?? 0;
+  const result: string[] = [];
+  for (let i = 0; i < stack.length; i++) {
+    if (maxNumberOfPaths === 0 || counts <= maxNumberOfPaths) {
+      const elem = stack[i];
+      const path = elem ? getDescription(elem) : UnknownTypeSymbol;
+      counts++;
+      result.push(path);
+    } else {
+      break;
+    }
   }
 
-  return {
-    prefix,
-    formattedPath: depsToPrint.map(getDescription).join(connector),
-  };
+  if (requestedType) {
+    if (maxNumberOfPaths === 0 || counts <= maxNumberOfPaths) {
+      result.push(getDescription(requestedType));
+      counts++;
+    }
+  }
+
+  const isTruncated =
+    maxNumberOfPaths !== 0 && counts < (requestedType ? 0 : 1) + stack.length;
+  if (isTruncated) {
+    result.push("truncated...");
+  }
+
+  return result;
 }
 
 /**
@@ -909,83 +1091,49 @@ function formatDependencyPath(
  * @returns A formatted error message string
  */
 function getErrorMessage(opts: TypeWireErrorOpt): string {
-  const paths =
-    opts.reason === ReasonCircularDependency
-      ? [...opts.paths, opts.type]
-      : opts.paths;
-
-  const { prefix, formattedPath } = formatDependencyPath(
-    paths,
+  const connector = " -> ";
+  const formattedPaths = formatDependencyPath(
+    opts.reason === ReasonCircularDependency ? opts.type : undefined,
+    opts.stack,
     opts.numberOfPathsToPrint,
   );
 
   return `Failed To Resolve ${getDescription(opts.type)}
 Reason: ${opts.reason}
 Instruction: ${getInstruction(opts)}
-Resolution Path: [${prefix}${formattedPath}]
+Resolution Path: [${formattedPaths.join(connector)}]
 `;
 }
 
 /**
- * The main container that manages dependencies.
- * Implements both ResolutionContext and BindingContext interfaces.
+ * Provides an isolated resolution context for a single dependency resolution chain.
+ *
+ * Each resolution operation (get/getSync) in the container creates a fresh instance
+ * of this context with its own dedicated monitor. This ensures that concurrent
+ * resolutions don't interfere with each other's dependency tracking, preventing
+ * false-positive circular dependency detection.
+ *
+ * This is the core implementation of the per-request isolation pattern that enables
+ * reliable parallel resolution of dependencies.
  */
-export class TypeWireContainer implements ResolutionContext, BindingContext {
-  /**
-   * Map of symbols to their provider definitions.
-   */
-  private readonly bindings: Map<symbol, TypeWire<unknown>>;
+class ScopedResolutionContext implements ResolutionContext {
+  constructor(
+    /**
+     * Map of symbols to their provider definitions.
+     */
+    private readonly bindings: Map<symbol, TypeWire<unknown>>,
 
-  /**
-   * Map of symbols to their singleton instances.
-   */
-  private readonly singletons: Map<symbol, unknown>;
+    /**
+     * Map of symbols to their singleton instances.
+     */
+    private readonly singletons: Map<symbol, unknown>,
 
-  /**
-   * Dependency tracker for detecting circular dependencies.
-   */
-  private readonly resolutionMonitor: ResolutionMonitor;
-
-  /**
-   * Creates a new TypeWireContainer.
-   * @param opts Optional configuration options
-   */
-  constructor(opts?: TypeWireContianerOpts) {
-    this.bindings = new Map();
-    this.singletons = new Map();
-    this.resolutionMonitor =
-      opts?.resolutionMonitor ??
-      new CircularDependencyMonitor({
-        numberOfPathsToPrint: opts?.numberOfPathsToPrint,
-      });
-  }
-
-  /**
-   * Binds a provider to the container.
-   * @param provider The provider to bind
-   */
-  bind(provider: AnyTypeWire): void {
-    this.bindings.set(provider.type.symbol, provider);
-  }
-
-  /**
-   * Checks if a binding exists in the container.
-   * @param typeSymbol The type symbol to check
-   * @returns True if the binding exists, false otherwise
-   */
-  isBound(typeSymbol: AnyTypeSymbol): boolean {
-    return this.bindings.has(typeSymbol.symbol);
-  }
-
-  /**
-   * Removes a binding from the container.
-   * Also removes any singleton instances of the binding.
-   * @param typeSymbol The type symbol identifying the binding to remove
-   */
-  async unbind(typeSymbol: AnyTypeSymbol): Promise<void> {
-    this.bindings.delete(typeSymbol.symbol);
-    this.singletons.delete(typeSymbol.symbol);
-  }
+    /**
+     * Dependency tracker for detecting circular dependencies.
+     * Each instance has its own dedicated monitor.
+     */
+    private readonly resolutionMonitor: ResolutionRequestMonitor,
+  ) {}
 
   /**
    * Gets the provider definition for a type symbol.
@@ -1023,26 +1171,13 @@ export class TypeWireContainer implements ResolutionContext, BindingContext {
           return singleton as T;
         }
 
-        const result = await binding.creator(this);
+        const result = await creator(this);
         this.singletons.set(typeSymbol.symbol, result);
         return result as T;
       }
 
       return (await creator(this)) as T;
     });
-  }
-
-  /**
-   * Gets all instances from the container asynchronously.
-   * @returns A promise that resolves to a map of all instances
-   */
-  async getAllAsync(): Promise<Map<symbol, unknown>> {
-    const result = new Map<symbol, unknown>();
-    for (const binding of this.bindings.values()) {
-      result.set(binding.type.symbol, await binding.getInstance(this));
-    }
-
-    return result;
   }
 
   /**
@@ -1082,5 +1217,156 @@ export class TypeWireContainer implements ResolutionContext, BindingContext {
 
       return result as T;
     });
+  }
+}
+
+/**
+ * The main container that manages dependencies.
+ * Implements both ResolutionContext and BindingContext interfaces.
+ *
+ * This container uses a per-request isolation pattern for dependency resolution:
+ * - Each call to get() or getSync() creates a fresh resolution context with its own monitor
+ * - Each context has an isolated tracking state, preventing interference between concurrent requests
+ * - This approach allows reliable parallel resolution of dependencies without false positives
+ *
+ * This design ensures that multiple concurrent resolutions (even of the same dependency)
+ * will work correctly without being mistakenly identified as circular dependencies.
+ */
+export class TypeWireContainer implements ResolutionContext, BindingContext {
+  /**
+   * Map of symbols to their provider definitions.
+   */
+  private readonly bindings: Map<symbol, TypeWire<unknown>>;
+
+  /**
+   * Map of symbols to their singleton instances.
+   */
+  private readonly singletons: Map<symbol, unknown>;
+
+  /**
+   * Dependency tracker for detecting circular dependencies.
+   */
+  private readonly resolutionMonitorFactory: ResolutionRequestMonitorFactory;
+
+  private readonly numberOfPathsToPrint?: number;
+
+  private requestSequence = 0;
+
+  /**
+   * Creates a new TypeWireContainer.
+   * @param opts Optional configuration options
+   */
+  constructor(opts?: TypeWireContianerOpts) {
+    this.bindings = new Map();
+    this.singletons = new Map();
+    this.resolutionMonitorFactory =
+      opts?.resolutionRequestMonitorFactory ??
+      defaultResolutionRequestMonitorFactory;
+    this.numberOfPathsToPrint = opts?.numberOfPathsToPrint;
+  }
+
+  /**
+   * Generates the next sequence number for request IDs.
+   * This is used as part of creating unique identifiers for each resolution request,
+   * helping with debugging and error tracking across concurrent resolution chains.
+   *
+   * @returns The next sequence number, resetting to 1 if max safe integer is reached
+   * @private
+   */
+  private getNextRequestId(): number {
+    let nextSequence = 0;
+    // arbitraty number to limit
+    if (this.requestSequence >= Number.MAX_SAFE_INTEGER) {
+      nextSequence = 1;
+    } else {
+      nextSequence = this.requestSequence + 1;
+    }
+    this.requestSequence = nextSequence;
+    return nextSequence;
+  }
+
+  /**
+   * Binds a provider to the container.
+   * @param provider The provider to bind
+   */
+  bind(provider: AnyTypeWire): void {
+    this.bindings.set(provider.type.symbol, provider);
+  }
+
+  /**
+   * Checks if a binding exists in the container.
+   * @param typeSymbol The type symbol to check
+   * @returns True if the binding exists, false otherwise
+   */
+  isBound(typeSymbol: AnyTypeSymbol): boolean {
+    return this.bindings.has(typeSymbol.symbol);
+  }
+
+  /**
+   * Removes a binding from the container.
+   * Also removes any singleton instances of the binding.
+   * @param typeSymbol The type symbol identifying the binding to remove
+   */
+  async unbind(typeSymbol: AnyTypeSymbol): Promise<void> {
+    this.bindings.delete(typeSymbol.symbol);
+    this.singletons.delete(typeSymbol.symbol);
+  }
+
+  /**
+   * Creates a fresh resolution context for a single resolution chain.
+   * Each call creates a new context with its own isolated monitor to prevent
+   * cross-talk between concurrent resolutions.
+   *
+   * @returns A new ScopedResolutionContext with its own monitor
+   * @private
+   */
+  private getScopedResolutionContext(): ResolutionContext {
+    const resoltionRequest = {
+      requestId: Symbol(this.getNextRequestId()),
+      numberOfPathsToPrint: this.numberOfPathsToPrint,
+    } satisfies ResolutionRequest;
+
+    const monitor = this.resolutionMonitorFactory(resoltionRequest);
+    return new ScopedResolutionContext(this.bindings, this.singletons, monitor);
+  }
+
+  /**
+   * Gets an instance of type T asynchronously.
+   * Supports both synchronous and asynchronous creators.
+   * @template T The type of instance to get
+   * @param typeSymbol The type symbol identifying the dependency
+   * @returns A promise that resolves to an instance of type T
+   * @throws Error if the dependency is not found or if a circular dependency is detected
+   */
+  async get<T>(typeSymbol: TypeSymbol<T>): Promise<T> {
+    const context = this.getScopedResolutionContext();
+    return context.get(typeSymbol);
+  }
+
+  /**
+   * Gets all instances from the container asynchronously.
+   * @returns A promise that resolves to a map of all instances
+   */
+  async getAllAsync(): Promise<Map<symbol, unknown>> {
+    const result = new Map<symbol, unknown>();
+    for (const binding of this.bindings.values()) {
+      result.set(binding.type.symbol, await this.get(binding.type));
+    }
+
+    return result;
+  }
+
+  /**
+   * Gets an instance of type T synchronously.
+   * Only supports synchronous creators.
+   * @template T The type of instance to get
+   * @param typeSymbol The type symbol identifying the dependency
+   * @returns An instance of type T
+   * @throws Error if the dependency is not found, if the creator is asynchronous,
+   *         or if a circular dependency is detected
+   */
+  getSync<T>(typeSymbol: TypeSymbol<T>): T {
+    const context = this.getScopedResolutionContext();
+    return context.getSync(typeSymbol);
   }
 }
