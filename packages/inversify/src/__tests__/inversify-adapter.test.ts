@@ -1,13 +1,12 @@
 import { describe, test, expect, beforeEach } from "vitest";
 import { Container } from "inversify";
 import { typeWireOf, type TypeWire } from "@typewirets/core";
-import {
-  adaptToResolutionContext,
-  adaptToBindingContext,
-  createInversifyAdapter,
-  InversifyAdapter,
-  adoptScope,
-} from "../index";
+import { InversifyAdapter, createInversifyAdapter, adoptScope } from "../index";
+
+interface ILogger {
+  isDebug: boolean;
+  log(message: string): void;
+}
 
 // Mock classes for testing
 class Logger {
@@ -55,35 +54,6 @@ describe("Inversify Adapter", () => {
           loggerWire.getInstanceSync(ctx),
         ),
     });
-  });
-
-  test("adaptToResolutionContext should provide a valid ResolutionContext", async () => {
-    // Create the context adapter
-    const bindingContext = adaptToBindingContext(container);
-    const resolutionContext = adaptToResolutionContext(container);
-
-    // Apply definition using the TypeWire API
-    await loggerWire.apply(bindingContext);
-
-    // Verify it can resolve using the TypeWire API
-    const logger = await loggerWire.getInstance(resolutionContext);
-    expect(logger).toBeInstanceOf(Logger);
-  });
-
-  test("adaptToBindingContext should provide a valid BindingContext", async () => {
-    // Create the binding context adapter
-    const context = adaptToBindingContext(container);
-
-    // Apply definition using TypeWire API
-    await loggerWire.apply(context);
-
-    // Verify binding using TypeWire API through isBound check
-    expect(context.isBound(loggerWire.type)).toBe(true);
-
-    // Verify resolution using TypeWire API
-    const resolutionContext = adaptToResolutionContext(container);
-    const logger = await loggerWire.getInstance(resolutionContext);
-    expect(logger).toBeInstanceOf(Logger);
   });
 
   test("InversifyAdapter should implement both contexts", async () => {
@@ -141,7 +111,7 @@ describe("Inversify Adapter", () => {
     expect(adoptScope("singleton")).toBe("Singleton");
     expect(adoptScope("transient")).toBe("Transient");
     expect(adoptScope("request")).toBe("Request");
-    expect(adoptScope(undefined)).toBeUndefined();
+    expect(adoptScope(undefined)).toBe("Singleton");
     expect(adoptScope("unknown")).toBeUndefined();
   });
 
@@ -185,5 +155,44 @@ describe("Inversify Adapter", () => {
     // Resolve the service with dependencies
     const userService = await userServiceWire.getInstance(inversifyAdapter);
     expect(userService).toBeInstanceOf(UserService);
+  });
+
+  test("error handling - getSync should throw for unbound dependencies", () => {
+    // Try to get an unbound dependency
+    expect(() => inversifyAdapter.getSync(loggerWire.type)).toThrow();
+  });
+
+  test("error handling - get should throw for unbound dependencies", async () => {
+    // Try to get an unbound dependency
+    await expect(inversifyAdapter.get(loggerWire.type)).rejects.toThrow();
+  });
+
+  test("multiple binds should replace previous bindings", async () => {
+    // Create two different logger implementations
+    const iLoggerWire = typeWireOf<ILogger>({
+      token: "ILogger",
+      creator: () => {
+        return {
+          isDebug: true,
+          log() {},
+        };
+      },
+    });
+
+    // Register the debugLoggerWire
+    await iLoggerWire.apply(inversifyAdapter);
+    const logger1 = await iLoggerWire.getInstance(inversifyAdapter);
+    expect(logger1.isDebug).toBe(true);
+
+    // Register the second logger with the same symbol
+    const iLogger2 = iLoggerWire.withCreator(() => {
+      return {
+        isDebug: false,
+        log() {},
+      };
+    });
+    await iLogger2.apply(inversifyAdapter);
+    const logger2 = await iLoggerWire.getInstance(inversifyAdapter);
+    expect(logger2.isDebug).toBe(false);
   });
 });

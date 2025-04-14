@@ -62,25 +62,61 @@ describe("TypeWireContainer", () => {
       );
     });
 
-    it("should support dependent providers", async () => {
+    it("should support dependent providers [array]", async () => {
       // Arrange
-      const testServiceWire = typeWireOf<TestService>({
+      const testServiceWire = typeWireOf({
         token: "testService",
         creator: () => new TestServiceImpl("test value"),
       });
 
-      const dependentServiceWire = typeWireOf<DependentService>({
+      const configWire = typeWireOf({
+        token: "configWire",
+        creator: () => 12,
+      });
+
+      const dependentServiceWire = typeWireOf({
         token: "dependentService",
-        creator: (resolver) => {
-          const testService = resolver.getSync(testServiceWire.type);
-          return new DependentServiceImpl(testService);
+        imports: [testServiceWire, configWire] as const,
+        createWith(imports) {
+          return new DependentServiceImpl(imports[0]);
         },
       });
 
       // Act
-      await testServiceWire.apply(container);
       await dependentServiceWire.apply(container);
-      const service = dependentServiceWire.getInstanceSync(container);
+      const service = await dependentServiceWire.getInstance(container);
+
+      // Assert
+      expect(service).toBeInstanceOf(DependentServiceImpl);
+      expect(service.getServiceValue()).toBe("Dependent: test value");
+    });
+
+    it("should support dependent providers [object]", async () => {
+      // Arrange
+      const testServiceWire = typeWireOf({
+        token: "testService",
+        creator: () => new TestServiceImpl("test value"),
+      });
+
+      const configWire = typeWireOf({
+        token: "configWire",
+        creator: () => 12,
+      });
+
+      const dependentServiceWire = typeWireOf({
+        token: "dependentService",
+        imports: {
+          test: testServiceWire,
+          config: configWire,
+        },
+        createWith({ test }) {
+          return new DependentServiceImpl(test);
+        },
+      });
+
+      // Act
+      await dependentServiceWire.apply(container);
+      const service = await dependentServiceWire.getInstance(container);
 
       // Assert
       expect(service).toBeInstanceOf(DependentServiceImpl);
