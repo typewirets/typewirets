@@ -3,7 +3,6 @@ import type {
   AnyTypeWire,
   BindingContext,
   TypeSymbol,
-  TypeWire,
   ResolutionContext as TypeWireResolutionContext,
 } from "@typewirets/core";
 import type { BindingScope, Container } from "inversify";
