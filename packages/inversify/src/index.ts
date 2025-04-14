@@ -6,12 +6,7 @@ import type {
   TypeWire,
   ResolutionContext as TypeWireResolutionContext,
 } from "@typewirets/core";
-import type {
-  BindingScope,
-  Container,
-  ContainerModuleLoadOptions,
-  ResolutionContext as InnversifyResolutionContext,
-} from "inversify";
+import type { BindingScope, Container } from "inversify";
 
 /**
  * Converts a TypeWire scope string to the equivalent InversifyJS BindingScope.
@@ -27,7 +22,7 @@ import type {
  */
 export function adoptScope(scope?: string): BindingScope | undefined {
   if (!scope) {
-    return undefined;
+    return "Singleton";
   }
 
   switch (scope.toLowerCase()) {
@@ -124,38 +119,6 @@ export class InversifyAdapter
     const result = await this.container.getAsync(typeSymbol.symbol);
     this.loaded.add(typeSymbol.symbol);
     return result as T;
-  }
-
-  /**
-   * Checks if an instance of the specified TypeWire is already loaded.
-   * For singleton scopes, this checks if the instance exists in cache.
-   * For transient scopes, this always returns false.
-   *
-   * @param typeWire - The TypeWire to check
-   * @returns True if an instance is already loaded, false otherwise
-   */
-  hasInstance(typeWire: AnyTypeWire): boolean {
-    if (!this.#isSingleton(typeWire.type.symbol)) {
-      return false;
-    }
-
-    return this.loaded.has(typeWire.type.symbol);
-  }
-
-  /**
-   * Returns an existing instance without triggering instantiation.
-   * If no instance exists, returns undefined instead of creating one.
-   *
-   * @template T - The type of instance to find
-   * @param typeWire - The TypeWire to look up
-   * @returns An existing instance of type T, or undefined if none exists
-   */
-  findInstance<T>(typeWire: TypeWire<T>): T | undefined {
-    if (!this.hasInstance(typeWire)) {
-      return;
-    }
-
-    return this.getSync(typeWire.type);
   }
 
   /**

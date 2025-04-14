@@ -3,6 +3,11 @@ import { Container } from "inversify";
 import { typeWireOf, type TypeWire } from "@typewirets/core";
 import { InversifyAdapter, createInversifyAdapter, adoptScope } from "../index";
 
+interface ILogger {
+  isDebug: boolean;
+  log(message: string): void;
+}
+
 // Mock classes for testing
 class Logger {
   log(_message: string): void {}
@@ -106,7 +111,7 @@ describe("Inversify Adapter", () => {
     expect(adoptScope("singleton")).toBe("Singleton");
     expect(adoptScope("transient")).toBe("Transient");
     expect(adoptScope("request")).toBe("Request");
-    expect(adoptScope(undefined)).toBeUndefined();
+    expect(adoptScope(undefined)).toBe("Singleton");
     expect(adoptScope("unknown")).toBeUndefined();
   });
 
@@ -152,71 +157,6 @@ describe("Inversify Adapter", () => {
     expect(userService).toBeInstanceOf(UserService);
   });
 
-  test("hasInstance should return false for unloaded dependencies", () => {
-    // Register but don't instantiate
-    loggerWire.apply(inversifyAdapter);
-
-    // Should not be loaded yet
-    expect(inversifyAdapter.hasInstance(loggerWire)).toBe(false);
-  });
-
-  test("hasInstance should return true after resolution for singletons", async () => {
-    // Create a singleton provider
-    const singletonLoggerWire = loggerWire.withScope("singleton");
-
-    // Register
-    await singletonLoggerWire.apply(inversifyAdapter);
-
-    // Not loaded yet
-    expect(inversifyAdapter.hasInstance(singletonLoggerWire)).toBe(false);
-
-    // Instantiate
-    await singletonLoggerWire.getInstance(inversifyAdapter);
-
-    // Should be loaded now
-    expect(inversifyAdapter.hasInstance(singletonLoggerWire)).toBe(true);
-  });
-
-  test("hasInstance should always return false for transient dependencies", async () => {
-    // Create a transient provider
-    const transientLoggerWire = loggerWire.withScope("transient");
-
-    // Register
-    await transientLoggerWire.apply(inversifyAdapter);
-
-    // Not loaded yet
-    expect(inversifyAdapter.hasInstance(transientLoggerWire)).toBe(false);
-
-    // Instantiate
-    await transientLoggerWire.getInstance(inversifyAdapter);
-
-    // Should still not be considered loaded (transient)
-    expect(inversifyAdapter.hasInstance(transientLoggerWire)).toBe(false);
-  });
-
-  test("findInstance should return undefined for uninstantiated dependencies", () => {
-    // Register but don't instantiate
-    loggerWire.apply(inversifyAdapter);
-
-    // Should return undefined
-    expect(inversifyAdapter.findInstance(loggerWire)).toBeUndefined();
-  });
-
-  test("findInstance should return instance for instantiated singletons", async () => {
-    // Create a singleton provider
-    const singletonLoggerWire = loggerWire.withScope("singleton");
-
-    // Register
-    await singletonLoggerWire.apply(inversifyAdapter);
-
-    // Instantiate
-    const original = await singletonLoggerWire.getInstance(inversifyAdapter);
-
-    // Should return the same instance
-    const found = inversifyAdapter.findInstance(singletonLoggerWire);
-    expect(found).toBe(original);
-  });
-
   test("error handling - getSync should throw for unbound dependencies", () => {
     // Try to get an unbound dependency
     expect(() => inversifyAdapter.getSync(loggerWire.type)).toThrow();
@@ -229,24 +169,30 @@ describe("Inversify Adapter", () => {
 
   test("multiple binds should replace previous bindings", async () => {
     // Create two different logger implementations
-    const debugLoggerWire = typeWireOf({
-      token: "Logger",
+    const iLoggerWire = typeWireOf<ILogger>({
+      token: "ILogger",
       creator: () => {
-        const logger = new Logger();
-        // Add some debug property to distinguish it
-        Object.assign(logger, { isDebug: true });
-        return logger;
+        return {
+          isDebug: true,
+          log() {},
+        };
       },
     });
 
-    // Register the first logger
-    await loggerWire.apply(inversifyAdapter);
-    const logger1 = await loggerWire.getInstance(inversifyAdapter);
-    expect((logger1 as any).isDebug).toBeUndefined();
+    // Register the debugLoggerWire
+    await iLoggerWire.apply(inversifyAdapter);
+    const logger1 = await iLoggerWire.getInstance(inversifyAdapter);
+    expect(logger1.isDebug).toBe(true);
 
     // Register the second logger with the same symbol
-    await debugLoggerWire.apply(inversifyAdapter);
-    const logger2 = await debugLoggerWire.getInstance(inversifyAdapter);
-    expect((logger2 as any).isDebug).toBe(true);
+    const iLogger2 = iLoggerWire.withCreator(() => {
+      return {
+        isDebug: false,
+        log() {},
+      };
+    });
+    await iLogger2.apply(inversifyAdapter);
+    const logger2 = await iLoggerWire.getInstance(inversifyAdapter);
+    expect(logger2.isDebug).toBe(false);
   });
 });

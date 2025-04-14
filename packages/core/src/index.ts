@@ -500,7 +500,7 @@ export class StandardTypeWire<T> implements TypeWire<T> {
     }
 
     if (binder.isBound(this.type)) {
-      binder.unbind(this.type);
+      await binder.unbind(this.type);
     }
 
     binder.bind(this);

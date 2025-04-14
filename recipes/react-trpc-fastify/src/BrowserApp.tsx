@@ -1,9 +1,4 @@
-import type {
-  ResolutionContext,
-  TypeWire,
-  TypeSymbol,
-  AnyTypeWire,
-} from "@typewirets/core";
+import type { ResolutionContext, TypeSymbol } from "@typewirets/core";
 import { ContainerContext } from "./hooks/ContainerContext";
 import { Suspense } from "react";
 import { TRPCProvider } from "./tier120/trpc.client";

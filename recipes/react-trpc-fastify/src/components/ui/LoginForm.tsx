@@ -1,4 +1,3 @@
-import React from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "@tanstack/react-form";
 import { useTRPC } from "@typewirets/react-fastify/tier120/trpc.client";
@@ -8,7 +7,6 @@ export function LoginForm(props: {
 }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
-  const [error, setError] = React.useState<string | null>(null);
 
   const login = useMutation(
     trpc.users.login.mutationOptions({
@@ -94,8 +92,6 @@ export function LoginForm(props: {
           )}
         </form.Field>
       </div>
-
-      {error && <div className="text-sm text-red-500">{error}</div>}
 
       <form.Subscribe
         selector={(state) => [state.canSubmit, state.isSubmitting]}
