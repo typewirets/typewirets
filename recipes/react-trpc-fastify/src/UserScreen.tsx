@@ -2,15 +2,15 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useTRPC } from "./tier120/trpc.client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { useWire } from "./hooks/useWire";
 import { AchievementStoreWire } from "./tier50/achivement/achievement.store";
+import { useTypeWire } from "@typewirets/react";
 
 export function UserScreen(props: {
   onLoginChange(): void;
 }) {
   const trpc = useTRPC();
   const queryClient = useQueryClient();
-  const useAchivementStore = useWire(AchievementStoreWire);
+  const useAchivementStore = useTypeWire(AchievementStoreWire);
   const trackAction = useAchivementStore((state) => state.trackAction);
   const [newUser, setNewUser] = useState({ name: "", age: "" });
 

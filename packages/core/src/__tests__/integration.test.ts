@@ -199,4 +199,27 @@ Resolution Path: Service: 99 -> Service: 98 -> Service: 97 -> Service: 96 -> Ser
     expect(serviceB.getName()).toBe("ServiceB");
     expect(serviceB.getServiceAName()).toBe("ServiceA");
   });
+
+  it("should create singleton instance only once", async () => {
+    // Arrange
+    const container = new TypeWireContainer();
+
+    let count = 0;
+    const serviceAProvider = typeWireOf<ServiceA>({
+      token: "serviceA",
+      creator: async () => {
+        count++;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return new ServiceAImpl();
+      },
+    });
+
+    await serviceAProvider.apply(container);
+
+    const promises = Array.from({ length: 100 }).map(() =>
+      serviceAProvider.getInstance(container),
+    );
+    await Promise.all(promises);
+    expect(count).toBe(1);
+  });
 });

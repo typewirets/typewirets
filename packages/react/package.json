@@ -1,0 +1,74 @@
+{
+  "name": "@typewirets/react",
+  "version": "0.1.0",
+  "description": "React adapter for TypeWire dependency injection",
+  "type": "module",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
+  "files": ["dist", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "pnpm clean && pnpm --filter '@typewirets/react' --parallel '/^build:.*/'",
+    "build:cjs": "tsc --project tsconfig.build.json --outDir dist/cjs --module Commonjs --moduleResolution Node",
+    "build:esm": "tsc --project tsconfig.build.json --outDir dist/esm --module ES2020 --moduleResolution Node",
+    "build:types": "tsc --project tsconfig.build.json --outDir dist/types --declaration --declarationMap",
+    "dev": "pnpm clean && pnpm --filter '@typewirets/react' --parallel '/^dev:.*/'",
+    "dev:cjs": "tsc --watch --project tsconfig.build.json --outDir dist/cjs --module Commonjs --moduleResolution Node",
+    "dev:esm": "tsc --watch --project tsconfig.build.json --outDir dist/esm --module ES2020 --moduleResolution Node",
+    "dev:types": "tsc --watch --project tsconfig.build.json --outDir dist/types --declaration --declarationMap",
+    "clean": "rimraf dist",
+    "check-types": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [
+    "typescript",
+    "dependency-injection",
+    "di",
+    "react",
+    "adapter",
+    "typewire"
+  ],
+  "author": "Rex Kim",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/typewirets/typewirets.git",
+    "directory": "packages/react"
+  },
+  "bugs": {
+    "url": "https://github.com/typewirets/typewirets/issues"
+  },
+  "homepage": "https://github.com/typewirets/typewirets#readme",
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.1.0",
+    "@typewirets/typescript-config": "workspace:*",
+    "@vitejs/plugin-react": "^4.3.4",
+    "jsdom": "^26.1.0",
+    "react": "^19.1.0",
+    "rimraf": "^6.0.1",
+    "typescript": "5.8.2",
+    "vitest": "^3.0.8"
+  },
+  "peerDependencies": {
+    "react": "^16.8 || ^17.0 || ^18.0 || ^19.0 || ^19.0.0-rc"
+  },
+  "peerDependenciesMeta": {
+    "@types/react": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "@typewirets/core": "workspace:*"
+  }
+}

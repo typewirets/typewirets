@@ -691,7 +691,7 @@ export function typeWireOf<T, D extends ImportArrayOrObject = AnyType>(
         return createWith(resolved, ctx);
       }
 
-      return defaultCreator();
+      return createWith({} as AnyType, ctx);
     };
 
     return new StandardTypeWire(typedSymbol, autoCreator, scope, deps);
@@ -854,6 +854,15 @@ export class CircularDependencyMonitor implements ResolutionRequestMonitor {
     this.resolutionStack.push(typeSymbol);
   }
 
+  /**
+   * Removes a type symbol to the resolution set and stack.
+   * @param typeSymbol The type symbol to add
+   */
+  private remove(typeSymbol: TypeSymbol<unknown>) {
+    this.resolutionSet.delete(typeSymbol.symbol);
+    this.resolutionStack.pop();
+  }
+
   private hasInStack(typeSymbol: TypeSymbol<unknown>): boolean {
     return this.resolutionSet.has(typeSymbol.symbol);
   }
@@ -887,6 +896,8 @@ export class CircularDependencyMonitor implements ResolutionRequestMonitor {
         }
       }
       throw err;
+    } finally {
+      this.remove(typeSymbol);
     }
   }
 
@@ -927,6 +938,8 @@ export class CircularDependencyMonitor implements ResolutionRequestMonitor {
       }
 
       throw err;
+    } finally {
+      this.remove(typeSymbol);
     }
   }
 }
@@ -1152,6 +1165,8 @@ class ScopedResolutionContext implements ResolutionContext {
      */
     private readonly singletons: Map<symbol, unknown>,
 
+    private readonly resolutions: Map<symbol, Promise<unknown>>,
+
     /**
      * Dependency tracker for detecting circular dependencies.
      * Each instance has its own dedicated monitor.
@@ -1175,6 +1190,23 @@ class ScopedResolutionContext implements ResolutionContext {
     return binding as TypeWire<T>;
   }
 
+  private registerResolution<T>(
+    typeSymbol: TypeSymbol<T>,
+    created: Promise<T>,
+  ): Promise<T> {
+    const updated = created
+      .then((value) => {
+        this.singletons.set(typeSymbol.symbol, value);
+        return value;
+      })
+      .finally(() => {
+        this.resolutions.delete(typeSymbol.symbol);
+      });
+
+    this.resolutions.set(typeSymbol.symbol, updated);
+    return updated;
+  }
+
   /**
    * Gets an instance of type T asynchronously.
    * Supports both synchronous and asynchronous creators.
@@ -1195,8 +1227,20 @@ class ScopedResolutionContext implements ResolutionContext {
           return singleton as T;
         }
 
-        const result = await creator(this);
-        this.singletons.set(typeSymbol.symbol, result);
+        const resolver = this.resolutions.get(typeSymbol.symbol);
+        if (resolver) {
+          const result = await resolver;
+          return result as T;
+        }
+
+        let created = creator(this);
+        if (!isPromise(created)) {
+          this.singletons.set(typeSymbol.symbol, created);
+          return created as T;
+        }
+
+        created = this.registerResolution(typeSymbol, created);
+        const result = await created;
         return result as T;
       }
 
@@ -1227,6 +1271,7 @@ class ScopedResolutionContext implements ResolutionContext {
 
         const result = creator(this);
         if (isPromise(result)) {
+          this.registerResolution(typeSymbol, result);
           throw TypeWireError.asyncBindingOnly();
         }
 
@@ -1267,6 +1312,8 @@ export class TypeWireContainer implements ResolutionContext, BindingContext {
    */
   private readonly singletons: Map<symbol, unknown>;
 
+  private readonly resolutions: Map<symbol, Promise<unknown>>;
+
   /**
    * Dependency tracker for detecting circular dependencies.
    */
@@ -1283,6 +1330,7 @@ export class TypeWireContainer implements ResolutionContext, BindingContext {
   constructor(opts?: TypeWireContianerOpts) {
     this.bindings = new Map();
     this.singletons = new Map();
+    this.resolutions = new Map();
     this.resolutionMonitorFactory =
       opts?.resolutionRequestMonitorFactory ??
       defaultResolutionRequestMonitorFactory;
@@ -1351,7 +1399,12 @@ export class TypeWireContainer implements ResolutionContext, BindingContext {
     } satisfies ResolutionRequest;
 
     const monitor = this.resolutionMonitorFactory(resoltionRequest);
-    return new ScopedResolutionContext(this.bindings, this.singletons, monitor);
+    return new ScopedResolutionContext(
+      this.bindings,
+      this.singletons,
+      this.resolutions,
+      monitor,
+    );
   }
 
   /**
