@@ -6,7 +6,14 @@ import {
 } from "@typewirets/core";
 import { describe, beforeEach, it, expect, vi } from "vitest";
 import { render, screen, act, waitFor } from "@testing-library/react";
+import { create } from "zustand";
 import { useTypeWire, ResolutionContextProvider } from "../index";
+
+interface CounterState {
+  count: number;
+  increment(): void;
+  decrement(): void;
+}
 
 describe("@typewirets/react", () => {
   let container: TypeWireContainer;
@@ -27,24 +34,25 @@ describe("@typewirets/react", () => {
       api: ApiWire,
     },
     createWith({ api }) {
-      let count = 0;
-      return {
-        getCount() {
-          return count;
-        },
+      return create<CounterState>((set, get) => ({
+        count: 0,
         increment() {
-          count++;
-          if (count === 10) {
+          const { count } = get();
+          const newCount = count + 1;
+          set({ count: newCount });
+          if (newCount === 10) {
             api.tellApiThatWeAreAllGood();
           }
         },
         decrement() {
-          count--;
+          const { count } = get();
+          const newCount = count - 1;
+          set({ count: newCount });
           if (count === 0) {
             api.tellApiThatWeAreDoomed();
           }
         },
-      };
+      }));
     },
   });
 
@@ -55,10 +63,11 @@ describe("@typewirets/react", () => {
 
   // Create test components
   function CounterDisplay() {
-    const countStore = useTypeWire(CountStoreWire);
+    const useCountStore = useTypeWire(CountStoreWire);
+    const countStore = useCountStore((state) => state);
     return (
       <div>
-        <div data-testid="count-value">{countStore.getCount()}</div>
+        <div data-testid="count-value">{countStore.count}</div>
         <button
           type="button"
           data-testid="increment-btn"
@@ -120,7 +129,7 @@ describe("@typewirets/react", () => {
     expect(apiSpy.tellApiThatWeAreDoomed).not.toHaveBeenCalled();
 
     // Test decrement functionality
-    for (let i = 0; i < 11; i++) {
+    for (let i = 0; i < 12; i++) {
       act(() => {
         screen.getByTestId("decrement-btn").click();
       });
