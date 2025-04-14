@@ -197,6 +197,7 @@ describe("TypeWireContainer", () => {
       expect(() => asyncServiceWire.getInstanceSync(container)).toThrow(
         expect.objectContaining({
           reason: "AsyncOnlyBinding",
+          retriable: true,
         }),
       );
     });

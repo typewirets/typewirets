@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { TypeWireContainer, typeWireOf } from "../index";
+import { TypeWireContainer, type AnyTypeWire, typeWireOf } from "../index";
 
 // Test interfaces and classes
 interface ServiceA {
@@ -113,6 +113,58 @@ describe("TypeWireTS Integration", () => {
     expect(() => serviceCProvider.getInstanceSync(container)).toThrow(
       expect.objectContaining({
         reason: "CircularDependency",
+        message: `Failed To Resolve serviceC
+Reason: CircularDependency
+Instruction: Check for circular references in your dependency graph and refactor to break the cycle.
+Resolution Path: serviceC -> serviceB -> serviceA -> [serviceC]
+`,
+      }),
+    );
+  });
+
+  it("should detect circular dependencies with truncated message", async () => {
+    // Arrange
+    const container = new TypeWireContainer({
+      numberOfPathsToPrint: 5,
+    });
+
+    const wires: AnyTypeWire[] = [];
+    const first: AnyTypeWire = typeWireOf({
+      token: "Service 0",
+      creator(ctx) {
+        wires[wires.length - 1]?.getInstanceSync(ctx);
+        return {};
+      },
+    });
+
+    wires.push(first);
+    let last = first;
+    for (let i = 1; i < 100; i++) {
+      const lastWire = last;
+      const current = typeWireOf({
+        token: `Service: ${i}`,
+        creator(ctx) {
+          lastWire.getInstanceSync(ctx);
+          return {};
+        },
+      });
+      last = current;
+      wires.push(current);
+    }
+
+    // Act & Assert
+    for (const wire of wires) {
+      await wire.apply(container);
+    }
+
+    expect(() => last.getInstanceSync(container)).toThrow(
+      expect.objectContaining({
+        reason: "CircularDependency",
+        message: `Failed To Resolve Service: 99
+Reason: CircularDependency
+Instruction: Check for circular references in your dependency graph and refactor to break the cycle.
+Resolution Path: Service: 99 -> Service: 98 -> Service: 97 -> Service: 96 -> Service: 95 -> ... -> Service 0 -> [Service: 99]
+`,
       }),
     );
   });

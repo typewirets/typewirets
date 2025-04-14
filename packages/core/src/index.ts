@@ -91,7 +91,11 @@ const UnknownTypeSymbol = "unknown";
  * @param typeSymbol - The type symbol to get the description for
  * @returns The description of the symbol, or "unknown" if none exists
  */
-function getDescription(typeSymbol: TypeSymbol<unknown>): string {
+function getDescription(typeSymbol?: TypeSymbol<unknown>): string {
+  if (!typeSymbol) {
+    return UnknownTypeSymbol;
+  }
+
   return typeSymbol.symbol.description ?? UnknownTypeSymbol;
 }
 
@@ -514,7 +518,25 @@ export class StandardTypeWire<T> implements TypeWire<T> {
    * @throws Error if the instance cannot be resolved synchronously
    */
   getInstanceSync(resolver: ResolutionContext): T {
-    return resolver.getSync(this.type);
+    try {
+      return resolver.getSync(this.type);
+    } catch (err: unknown) {
+      if (err instanceof TypeWireError) {
+        // getInstanceSync can be retried later with following occasions
+        // 1. If this wire is for singleton scope.
+        // 2. If the error we captured is specific to AsyncOnlyBinding
+        //
+        // This is because, if we were to make the sync invocation again
+        // once singleton instance is pre-loaded, this getInstanceSync method will
+        // succeed.
+        if (err.retriable === undefined) {
+          const wireScope = this.scope ?? ScopeSingleton;
+          err.retriable = wireScope === ScopeSingleton;
+        }
+      }
+
+      throw err;
+    }
   }
 
   /**
@@ -847,6 +869,7 @@ export class CircularDependencyMonitor implements ResolutionRequestMonitor {
   monitor<T>(typeSymbol: TypeSymbol<T>, action: SyncAction<T>): T {
     try {
       if (this.hasInStack(typeSymbol)) {
+        this.add(typeSymbol);
         throw TypeWireError.circularDependency();
       }
 
@@ -857,7 +880,6 @@ export class CircularDependencyMonitor implements ResolutionRequestMonitor {
         err.requestId = this.requestId;
         if (!err.message) {
           err.message = getErrorMessage({
-            type: typeSymbol,
             reason: err.reason,
             stack: this.resolutionStack,
             numberOfPathsToPrint: this.numberOfPathsToPrint,
@@ -883,6 +905,7 @@ export class CircularDependencyMonitor implements ResolutionRequestMonitor {
     try {
       // Check for circular dependency
       if (this.hasInStack(typeSymbol)) {
+        this.add(typeSymbol);
         throw TypeWireError.circularDependency();
       }
 
@@ -896,7 +919,6 @@ export class CircularDependencyMonitor implements ResolutionRequestMonitor {
         err.requestId = this.requestId;
         if (!err.message) {
           err.message = getErrorMessage({
-            type: typeSymbol,
             reason: err.reason,
             stack: this.resolutionStack,
             numberOfPathsToPrint: this.numberOfPathsToPrint,
@@ -948,6 +970,8 @@ export class TypeWireError extends Error {
    */
   public requestId?: symbol;
 
+  public retriable?: boolean;
+
   /**
    * Creates a new TypeWireError.
    * @param reason - The reason for the error
@@ -966,6 +990,13 @@ export class TypeWireError extends Error {
     this.reason = reason;
 
     Object.defineProperty(this, "requestId", {
+      value: undefined,
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    });
+
+    Object.defineProperty(this, "retriable", {
       value: undefined,
       enumerable: false,
       writable: true,
@@ -1011,9 +1042,6 @@ export interface TypeWireErrorOpt {
    */
   requestId?: symbol;
 
-  /** The type symbol that failed to resolve */
-  type: TypeSymbol<unknown>;
-
   /** The reason for the error */
   reason: ErrorReason;
 
@@ -1051,17 +1079,16 @@ function getInstruction(opts: TypeWireErrorOpt): string {
  * @returns {[]string} path fragments in string
  */
 function formatDependencyPath(
-  requestedType: TypeSymbol<unknown> | undefined,
   stack: TypeSymbol<unknown>[],
   numberOfPathsToPrint?: number,
 ): string[] {
   let counts = 0;
   const maxNumberOfPaths = numberOfPathsToPrint ?? 0;
   const result: string[] = [];
-  for (let i = 0; i < stack.length; i++) {
-    if (maxNumberOfPaths === 0 || counts <= maxNumberOfPaths) {
+  for (let i = 0; i < stack.length - 2; i++) {
+    if (maxNumberOfPaths === 0 || counts < maxNumberOfPaths) {
       const elem = stack[i];
-      const path = elem ? getDescription(elem) : UnknownTypeSymbol;
+      const path = getDescription(elem);
       counts++;
       result.push(path);
     } else {
@@ -1069,19 +1096,16 @@ function formatDependencyPath(
     }
   }
 
-  if (requestedType) {
-    if (maxNumberOfPaths === 0 || counts <= maxNumberOfPaths) {
-      result.push(getDescription(requestedType));
-      counts++;
-    }
+  // insert the truncation if needed
+  if (counts < stack.length - 2) {
+    result.push("...");
   }
 
-  const isTruncated =
-    maxNumberOfPaths !== 0 && counts < (requestedType ? 0 : 1) + stack.length;
-  if (isTruncated) {
-    result.push("truncated...");
+  // insert the last
+  if (stack.length - 2 >= 0) {
+    result.push(`${getDescription(stack[stack.length - 2])}`);
   }
-
+  result.push(`[${getDescription(stack[stack.length - 1])}]`);
   return result;
 }
 
@@ -1091,17 +1115,17 @@ function formatDependencyPath(
  * @returns A formatted error message string
  */
 function getErrorMessage(opts: TypeWireErrorOpt): string {
+  const typeWire = opts.stack[opts.stack.length - 1];
   const connector = " -> ";
   const formattedPaths = formatDependencyPath(
-    opts.reason === ReasonCircularDependency ? opts.type : undefined,
     opts.stack,
     opts.numberOfPathsToPrint,
   );
 
-  return `Failed To Resolve ${getDescription(opts.type)}
+  return `Failed To Resolve ${getDescription(typeWire)}
 Reason: ${opts.reason}
 Instruction: ${getInstruction(opts)}
-Resolution Path: [${formattedPaths.join(connector)}]
+Resolution Path: ${formattedPaths.join(connector)}
 `;
 }
 
@@ -1132,7 +1156,7 @@ class ScopedResolutionContext implements ResolutionContext {
      * Dependency tracker for detecting circular dependencies.
      * Each instance has its own dedicated monitor.
      */
-    private readonly resolutionMonitor: ResolutionRequestMonitor,
+    private readonly resolutionRequestMonitor: ResolutionRequestMonitor,
   ) {}
 
   /**
@@ -1160,7 +1184,7 @@ class ScopedResolutionContext implements ResolutionContext {
    * @throws Error if the dependency is not found or if a circular dependency is detected
    */
   async get<T>(typeSymbol: TypeSymbol<T>): Promise<T> {
-    return this.resolutionMonitor.monitorAsync(typeSymbol, async () => {
+    return this.resolutionRequestMonitor.monitorAsync(typeSymbol, async () => {
       const binding = this.getBinding(typeSymbol);
       const creator = binding.creator;
       const scope = binding.scope ?? ScopeSingleton;
@@ -1190,7 +1214,7 @@ class ScopedResolutionContext implements ResolutionContext {
    *         or if a circular dependency is detected
    */
   getSync<T>(typeSymbol: TypeSymbol<T>): T {
-    return this.resolutionMonitor.monitor(typeSymbol, () => {
+    return this.resolutionRequestMonitor.monitor(typeSymbol, () => {
       const binding = this.getBinding(typeSymbol);
       const creator = binding.creator;
       const scope = binding.scope ?? ScopeSingleton;
