@@ -1142,17 +1142,38 @@ Resolution Path: ${formattedPaths.join(connector)}
 `;
 }
 
+/**
+ * ResolutionState wraps internal state shared between ResolutionContext for handling followings:
+ *
+ * 1. All of TypeWire bindings indexed by symbol
+ * 2. Loaded singleton instances indexed by symbol
+ * 3. In-flight async resolutions of singleton wires indexed by symbol
+ *
+ * This class serves as the internal state management for TypeWireContainer, handling the storage
+ * and retrieval of bindings, singleton instances, and tracking of in-progress async resolutions.
+ * It is not exposed to users directly but is used internally by TypeWireContainer to manage
+ * dependency injection state.
+ */
 class ResolutionState {
   /**
    * Map of symbols to their provider definitions.
+   * This map stores all registered TypeWire bindings, allowing for quick lookup
+   * of providers by their associated type symbols.
    */
   private readonly bindings: Map<symbol, TypeWire<unknown>> = new Map();
 
   /**
    * Map of symbols to their singleton instances.
+   * This map caches resolved singleton instances, ensuring that subsequent
+   * resolutions of the same type return the same instance.
    */
   private readonly singletons: Map<symbol, unknown> = new Map();
 
+  /**
+   * Map of symbols of in-flight async resolution for singleton wires.
+   * This map tracks ongoing async resolutions to prevent duplicate resolution
+   * attempts for the same type while a resolution is in progress.
+   */
   private readonly resolutions: Map<symbol, Promise<unknown>> = new Map();
 
   /**
@@ -1171,32 +1192,71 @@ class ResolutionState {
     return binding as TypeWire<T>;
   }
 
+  /**
+   * Retrieves all registered TypeWire bindings.
+   * @returns An array of all registered TypeWire instances
+   */
   getAllBindings(): AnyTypeWire[] {
     return Array.from([...this.bindings.values()]);
   }
 
+  /**
+   * Checks if a type symbol has a registered binding.
+   * @param typeSymbol The type symbol to check
+   * @returns true if a binding exists for the symbol, false otherwise
+   */
   isBound(typeSymbol: AnyTypeSymbol): boolean {
     return this.bindings.has(typeSymbol.symbol);
   }
 
+  /**
+   * Registers a new TypeWire binding.
+   * @param wire The TypeWire instance to register
+   */
   bind(wire: AnyTypeWire): void {
     this.bindings.set(wire.type.symbol, wire);
   }
 
+  /**
+   * Removes a binding and its associated singleton instance and resolution.
+   * This method is used to clean up resources when a binding is no longer needed.
+   * @param typeSymbol The type symbol to unbind
+   */
   async unbind(typeSymbol: AnyTypeSymbol): Promise<void> {
     this.bindings.delete(typeSymbol.symbol);
     this.singletons.delete(typeSymbol.symbol);
     this.resolutions.delete(typeSymbol.symbol);
   }
 
+  /**
+   * Gets the cached singleton instance for a type symbol.
+   * @template T The type of the singleton instance
+   * @param typeSymbol The type symbol to get the singleton for
+   * @returns The singleton instance if it exists, undefined otherwise
+   */
   getSingletonValue<T>(typeSymbol: TypeSymbol<T>): T | undefined {
     return this.singletons.get(typeSymbol.symbol) as T | undefined;
   }
 
+  /**
+   * Gets the in-progress resolution promise for a type symbol.
+   * @template T The type of the instance being resolved
+   * @param typeSymbol The type symbol to get the resolution for
+   * @returns The resolution promise if one exists, undefined otherwise
+   */
   getRunningResolver<T>(typeSymbol: TypeSymbol<T>): Promise<T> | undefined {
     return this.resolutions.get(typeSymbol.symbol) as Promise<T> | undefined;
   }
 
+  /**
+   * Registers a new resolution promise and sets up handlers to update the singleton cache.
+   * This method ensures that singleton instances are properly cached once resolved
+   * and that in-progress resolutions are tracked.
+   * @template T The type of the instance being resolved
+   * @param typeSymbol The type symbol being resolved
+   * @param created The promise that will resolve to the instance
+   * @returns The updated promise that includes caching logic
+   */
   registerResolution<T>(
     typeSymbol: TypeSymbol<T>,
     created: Promise<T>,
@@ -1214,6 +1274,13 @@ class ResolutionState {
     return updated;
   }
 
+  /**
+   * Directly registers a singleton instance for a type symbol.
+   * This method is used to manually set a singleton instance, bypassing the resolution process.
+   * @template T The type of the singleton instance
+   * @param typeSymbol The type symbol to register the singleton for
+   * @param result The singleton instance to register
+   */
   registerSingleton<T>(typeSymbol: TypeSymbol<T>, result: T) {
     this.singletons.set(typeSymbol.symbol, result);
   }
@@ -1232,6 +1299,9 @@ class ResolutionState {
  */
 class ScopedResolutionContext implements ResolutionContext {
   constructor(
+    /**
+     * A resolutionState shared between TypeWireContainer and ScopedResolutionContext
+     */
     private readonly resolutionState: ResolutionState,
 
     /**
@@ -1240,17 +1310,6 @@ class ScopedResolutionContext implements ResolutionContext {
      */
     private readonly resolutionRequestMonitor: ResolutionRequestMonitor,
   ) {}
-
-  /**
-   * Gets the provider definition for a type symbol.
-   * @template T The type of instance the provider creates
-   * @param typeSymbol The type symbol to get the provider for
-   * @returns The provider definition
-   * @throws Error if no provider is found for the symbol
-   */
-  private getBinding<T>(typeSymbol: TypeSymbol<T>): TypeWire<T> {
-    return this.resolutionState.getBinding(typeSymbol);
-  }
 
   /**
    * Gets an instance of type T asynchronously.
@@ -1262,7 +1321,7 @@ class ScopedResolutionContext implements ResolutionContext {
    */
   async get<T>(typeSymbol: TypeSymbol<T>): Promise<T> {
     return this.resolutionRequestMonitor.monitorAsync(typeSymbol, async () => {
-      const binding = this.getBinding(typeSymbol);
+      const binding = this.resolutionState.getBinding(typeSymbol);
       const creator = binding.creator;
       const scope = binding.scope ?? ScopeSingleton;
 
@@ -1304,7 +1363,7 @@ class ScopedResolutionContext implements ResolutionContext {
    */
   getSync<T>(typeSymbol: TypeSymbol<T>): T {
     return this.resolutionRequestMonitor.monitor(typeSymbol, () => {
-      const binding = this.getBinding(typeSymbol);
+      const binding = this.resolutionState.getBinding(typeSymbol);
       const creator = binding.creator;
       const scope = binding.scope ?? ScopeSingleton;
 
@@ -1347,15 +1406,24 @@ class ScopedResolutionContext implements ResolutionContext {
  * will work correctly without being mistakenly identified as circular dependencies.
  */
 export class TypeWireContainer implements ResolutionContext, BindingContext {
+  /**
+   * Internal state management for bindings, singletons, and resolutions
+   */
   private readonly resolutionState: ResolutionState;
 
   /**
-   * Dependency tracker for detecting circular dependencies.
+   * Factory function for creating resolution monitors
    */
   private readonly resolutionMonitorFactory: ResolutionRequestMonitorFactory;
 
+  /**
+   * Optional limit on how many path items to display in error messages
+   */
   private readonly numberOfPathsToPrint?: number;
 
+  /**
+   * Counter for generating unique request IDs
+   */
   private requestSequence = 0;
 
   /**
