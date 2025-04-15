@@ -30,6 +30,13 @@ In addition to the README files in each package, we provide several documents th
 ```typescript
 import { typeWireOf, TypeWireContainer } from '@typewirets/core';
 
+// Define your domain types
+interface User {
+  id: string;
+  name: string;
+  email: string;
+}
+
 // Define your services
 class Logger {
   log(message: string): void {
@@ -40,37 +47,121 @@ class Logger {
 class UserService {
   constructor(private logger: Logger) {}
 
-  getUser(id: string): void {
+  async getUser(id: string): Promise<User | undefined> {
     this.logger.log(`Getting user with id: ${id}`);
-    // Implementation...
+    // Simulate database lookup
+    if (id === '123') {
+      return {
+        id: '123',
+        name: 'John Doe',
+        email: 'john@example.com'
+      };
+    }
+    return undefined;
   }
 }
 
 // Create TypeWire definitions
-const loggerWire = typeWireOf({
+// Note: Logger is a singleton by default
+const LoggerWire = typeWireOf({
   token: 'Logger',
   creator: () => new Logger()
 });
 
-const userServiceWire = typeWireOf({
+// UserService depends on Logger and is also a singleton
+const UserServiceWire = typeWireOf({
   token: 'UserService',
-  creator: (ctx) => new UserService(loggerWire.getInstance(ctx))
+  // Specify dependencies using imports
+  imports: {
+    logger: LoggerWire,
+  },
+  // Dependencies are automatically injected with createWith
+  createWith({ logger }) {
+    return new UserService(logger);
+  },
 });
 
-// Create a container
-const container = new TypeWireContainer();
+// Create and use the container
+async function main() {
+  const container = new TypeWireContainer();
 
-// Register the dependencies (using async/await)
-async function setup() {
-  await loggerWire.apply(container);
-  await userServiceWire.apply(container);
-  
-  // Resolve and use a service
-  const userService = userServiceWire.getInstance(container);
-  userService.getUser('123');
+  // Register all dependencies (including nested ones)
+  await UserServiceWire.apply(container);
+
+  // Resolve and use services
+  const userService = await UserServiceWire.getInstance(container);
+  const user = await userService.getUser('123');
 }
 
-setup();
+main();
+```
+
+### Testing
+
+TypeWire makes testing easy with its flexible wire system. Here are some common testing patterns:
+
+```typescript
+// Group related wires for testing
+const testWires = typeWireGroupOf([
+  LoggerWire,
+  UserServiceWire,
+]);
+
+async function setup(testWireFragment: Applicable) {
+  const container = new TypeWireContainer();
+  await testWireFragment.apply(container);
+  return container;
+}
+
+test('userService returns mock user for known ID', async () => {
+
+  const mockUser = {
+    id: 'known',
+    name: 'Mock User',
+    email: 'mock@example.com'
+  } satisfies User;
+
+  const mockedWires = testWires.withExtraWires([
+    UserServiceWire.withCreator(() => {
+      return {
+        async getUser(id: string): Promise<User | undefined> {
+          if (id === 'known') {
+            return mockUser;
+          }
+          return undefined;
+        }
+      };
+    })
+  ]);
+
+  const container = await setup(mockedWires);
+  const userService = await UserServiceWire.getInstance(container);
+  const user = await userService.getUser('known');
+  
+  expect(user).toBeDefined();
+  expect(user).toBe(mockUser);
+});
+
+test('userService logs when retrieving user', async () => {
+  const mockedWires = testWires.withExtraWires([
+    LoggerWire.withCreator(async (ctx, originalCreator) => {
+      const original = await originalCreator(ctx);
+      // Spy on the original instance
+      vi.spyOn(original, 'log');
+      return original;
+    })
+  ]);
+
+  const container = await setup(mockedWires);
+  const userService = await UserServiceWire.getInstance(container);
+  const logger = await LoggerWire.getInstance(container);
+  
+  await userService.getUser('123');
+  
+  expect(logger.log).toHaveBeenCalled();
+  expect(logger.log).toHaveBeenCalledWith('Getting user with id: 123');
+});
+
 ```
 
 ## License
