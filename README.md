@@ -75,7 +75,7 @@ const UserServiceWire = typeWireOf({
   imports: {
     logger: LoggerWire,
   },
-  // Dependencies are automatically injected
+  // Dependencies are automatically injected with createWith
   createWith({ logger }) {
     return new UserService(logger);
   },
@@ -85,26 +85,12 @@ const UserServiceWire = typeWireOf({
 async function main() {
   const container = new TypeWireContainer();
 
-  try {
-    // Register all dependencies (including nested ones)
-    await UserServiceWire.apply(container);
-    
-    // Resolve and use services
-    const userService = await UserServiceWire.getInstance(container);
-    const user = await userService.getUser('123');
-    
-    if (user) {
-      console.log(`Found user: ${user.name}`);
-    } else {
-      console.log('User not found');
-    }
+  // Register all dependencies (including nested ones)
+  await UserServiceWire.apply(container);
 
-    // Demonstrate singleton behavior
-    const sameUserService = await UserServiceWire.getInstance(container);
-    console.log('Same instance?', userService === sameUserService); // true
-  } catch (error) {
-    console.error('Error:', error);
-  }
+  // Resolve and use services
+  const userService = await UserServiceWire.getInstance(container);
+  const user = await userService.getUser('123');
 }
 
 main();
@@ -121,25 +107,26 @@ const testWires = typeWireGroupOf([
   UserServiceWire,
 ]);
 
-// Helper function to set up test container
 async function setup(testWireFragment: Applicable) {
   const container = new TypeWireContainer();
   await testWireFragment.apply(container);
   return container;
 }
 
-// Test 1: Mock entire service implementation
 test('userService returns mock user for known ID', async () => {
+
+  const mockUser = {
+    id: 'known',
+    name: 'Mock User',
+    email: 'mock@example.com'
+  } satisfies User;
+
   const mockedWires = testWires.withExtraWires([
     UserServiceWire.withCreator(() => {
       return {
         async getUser(id: string): Promise<User | undefined> {
           if (id === 'known') {
-            return {
-              id: 'known',
-              name: 'Mock User',
-              email: 'mock@example.com'
-            };
+            return mockUser;
           }
           return undefined;
         }
@@ -152,11 +139,9 @@ test('userService returns mock user for known ID', async () => {
   const user = await userService.getUser('known');
   
   expect(user).toBeDefined();
-  expect(user?.id).toBe('known');
-  expect(user?.name).toBe('Mock User');
+  expect(user).toBe(mockUser);
 });
 
-// Test 2: Spy on dependencies
 test('userService logs when retrieving user', async () => {
   const mockedWires = testWires.withExtraWires([
     LoggerWire.withCreator(async (ctx, originalCreator) => {
@@ -177,40 +162,7 @@ test('userService logs when retrieving user', async () => {
   expect(logger.log).toHaveBeenCalledWith('Getting user with id: 123');
 });
 
-// Test 3: Error handling
-test('userService handles errors gracefully', async () => {
-  const mockedWires = testWires.withExtraWires([
-    UserServiceWire.withCreator(() => {
-      return {
-        async getUser(id: string): Promise<User | undefined> {
-          throw new Error('Database connection failed');
-        }
-      };
-    })
-  ]);
-
-  const container = await setup(mockedWires);
-  const userService = await UserServiceWire.getInstance(container);
-  
-  await expect(userService.getUser('123')).rejects.toThrow('Database connection failed');
-});
-
-// Test 4: Test transient vs singleton behavior
-test('services respect their scope settings', async () => {
-  // Create a transient version of Logger
-  const TransientLoggerWire = LoggerWire.withScope('transient');
-  
-  const testWires = typeWireGroupOf([
-    TransientLoggerWire,
-    UserServiceWire
-  ]);
-
-  const container = await setup(testWires);
-  const logger1 = await LoggerWire.getInstance(container);
-  const logger2 = await LoggerWire.getInstance(container);
-  
-  expect(logger1).not.toBe(logger2); // Different instances for transient scope
-});
+```
 
 ## License
 
