@@ -2,9 +2,12 @@ import { typeWireOf } from "@typewirets/core";
 import type { UserService } from "./user-service";
 import { InMemoryUserServiceWire } from "./user-service.memory";
 
-export const UserServiceWire = typeWireOf<UserService>({
+export const UserServiceWire = typeWireOf({
   token: "UserServiceWire",
-  async creator(ctx) {
-    return InMemoryUserServiceWire.getInstance(ctx);
+  imports: {
+    inMemoryUserService: InMemoryUserServiceWire,
+  },
+  createWith({ inMemoryUserService }): UserService {
+    return inMemoryUserService satisfies UserService;
   },
 });

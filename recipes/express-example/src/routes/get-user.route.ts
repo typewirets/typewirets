@@ -10,9 +10,10 @@ export const UserRequestByIdSchema = z.object({
 // showing a simple example of embedded wire and implementation
 export const GetUserRouteWire = typeWireOf({
   token: "GetUserRoute",
-  async creator(ctx) {
-    const userService = await UserServiceWire.getInstance(ctx);
-
+  imports: {
+    userService: UserServiceWire,
+  },
+  createWith({ userService }) {
     // recommended route
     // /api/users/:id
     return async (req: Request, res: Response) => {

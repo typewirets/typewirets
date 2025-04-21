@@ -1,6 +1,6 @@
 {
   "name": "@typewirets/core",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "A lightweight, container-agnostic dependency injection library for TypeScript",
   "type": "module",
   "main": "dist/cjs/index.js",
