@@ -201,3 +201,7 @@ This approach makes it easier to:
 - Test components in isolation
 - Organize and manage dependencies
 - Maintain type safety
+
+## Reference:
+
+* https://dev.to/myungsunrex/clarity-in-architecture-not-oop-vs-fp-2mhf

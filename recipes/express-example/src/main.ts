@@ -1,14 +1,13 @@
 import express from "express";
-import { TypeWireContainer, combineWireGroups } from "@typewirets/core";
-import { PreloadWires, AppWires } from "./main.wires";
+import { TypeWireContainer } from "@typewirets/core";
+import { AppWires } from "./main.wires";
 import { ConfigServiceWire } from "./config/config-service.wire";
 import { loadRoutes } from "./routes/routes";
 
 async function main() {
   const container = new TypeWireContainer();
 
-  const wireGroup = combineWireGroups([PreloadWires, AppWires]);
-  await wireGroup.apply(container);
+  await AppWires.apply(container);
 
   const config = await ConfigServiceWire.getInstance(container);
   const app = express();

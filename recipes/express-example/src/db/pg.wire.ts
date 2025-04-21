@@ -17,10 +17,12 @@ export const DbConfigSchema = z.object({
 
 export const PgPoolWire = typeWireOf({
   token: "PgPool",
-  async creator(ctx) {
-    const config = await ConfigServiceWire.getInstance(ctx);
+  imports: {
+    configService: ConfigServiceWire,
+  },
+  createWith({ configService }) {
     const postgreConfig = DbConfigSchema.parse(
-      config.get("datasources.postgres"),
+      configService.get("datasources.postgres"),
     );
     return new pg.Pool(postgreConfig);
   },

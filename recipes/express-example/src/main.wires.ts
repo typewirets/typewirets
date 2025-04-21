@@ -7,12 +7,9 @@ import { UserServiceWire } from "./services/user-service.wire";
 import { InMemoryUserServiceWire } from "./services/user-service.memory";
 // import { PgPoolWire } from "./db/pg.wire";
 
-export const PreloadWires = typeWireGroupOf([
+export const AppWires = typeWireGroupOf([
   JsoncConfigRecordWire,
   ConfigServiceWire,
-]);
-
-export const AppWires = typeWireGroupOf([
   UserServiceWire,
   InMemoryUserServiceWire,
   SaveUserRouteWire,

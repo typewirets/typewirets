@@ -14,14 +14,15 @@ A lightweight, container-agnostic dependency injection library for TypeScript th
 
 ## Why TypeWire?
 
-TypeWire is designed to shift focus from object creation to behavior composition. By abstracting away the complexities of instantiation, developers can:
+TypeWire is designed to create clear boundaries and explicit dependencies in your codebase. It helps you:
 
-- **Focus on behavior rather than construction** - Write code that uses objects for what they do, not how they're created
-- **Compose behaviors more easily** - Build complex systems by combining simpler, well-defined components
-- **Separate concerns more cleanly** - Decouple what an object does from how it's created and configured
-- **Improve testability** - Replace real implementations with test doubles without changing consumer code
+- **Build clear boundaries** - Separate behavior from construction and configuration
+- **Make dependencies explicit** - No magic, no ambient context, just clear dependencies
+- **Compose behaviors easily** - Build complex systems from simple, well-defined components
+- **Keep testing simple** - Replace implementations without changing consumer code
+- **Control side effects** - Manage where and how side effects occur in your system
 
-The goal is to let you think more about interactions between components and less about their instantiation details, making your code more maintainable and your architecture more flexible.
+The goal is to help you build systems that are clear, testable, and maintainable.
 
 ## Installation
 
@@ -43,77 +44,162 @@ const userSymbol = typeSymbolOf<User>('User');
 
 ### TypeWire
 
-Defines how to create and manage instances of a specific type.
+Defines how to create and manage instances of a specific type. Works with both classes and functions:
 
 ```typescript
 import { typeWireOf } from '@typewirets/core';
 
-const userWire = typeWireOf({
-  token: 'User',
-  creator: (ctx) => new User()
+// Class-based service
+const loggerWire = typeWireOf({
+  token: 'Logger',
+  creator: () => new Logger()
+});
+
+// Function-based service
+const configWire = typeWireOf({
+  token: 'Config',
+  creator: async () => {
+    const config = await loadConfig();
+    return createConfig(config);
+  }
+});
+
+// Service with dependencies
+const userServiceWire = typeWireOf({
+  token: 'UserService',
+  imports: {
+    logger: loggerWire,
+    config: configWire
+  },
+  createWith: ({ logger, config }) => new UserService(logger, config)
 });
 ```
 
-### TypeWireGroup
+### Managing Context
 
-A collection of TypeWire instances that can be managed together.
+TypeWire helps you separate long-lived services from contextual state:
 
 ```typescript
-import { typeWireGroupOf, combineWireGroups } from '@typewirets/core';
+// Long-lived service (use TypeWire)
+const dbClientWire = typeWireOf({
+  token: 'DbClient',
+  creator: () => new DbClient()
+});
 
-// Create a group of wires
-const serviceWires = typeWireGroupOf([userWire, loggerWire]);
+// Contextual state (construct where needed)
+class RequestContext {
+  constructor(
+    private userId: string,
+    private dbClient: DbClient
+  ) {}
 
-// Apply all wires in the group
-await serviceWires.apply(container);
+  async getUser() {
+    return this.dbClient.getUser(this.userId);
+  }
+}
 
-// Combine multiple groups
-const allWires = combineWireGroups([coreWires, featureWires]);
+const userServiceWire = typeWireOf({
+  token: 'UserService',
+  imports: {
+    dbClient: dbClientWire
+  },
+  createWith: ({ dbClient }) => ({
+    createContext: (userId: string) => new RequestContext(userId, dbClient)
+  })
+});
 ```
 
-### TypeWireContainer
+### Composing Services
 
-The default implementation of both ResolutionContext and BindingContext.
+TypeWire makes it easy to compose and override services:
 
 ```typescript
-import { TypeWireContainer } from '@typewirets/core';
+// Base configuration
+const baseConfigWire = typeWireOf({
+  token: 'Config',
+  creator: () => ({ apiUrl: 'https://api.example.com' })
+});
 
-const container = new TypeWireContainer();
+// Development override
+const devConfigWire = baseConfigWire.withCreator(() => ({
+  apiUrl: 'http://localhost:3000'
+}));
 
-// Register dependencies
-await userWire.apply(container);
+// Testing override
+const testConfigWire = baseConfigWire.withCreator(() => ({
+  apiUrl: 'http://test-api'
+}));
 
-// Resolve instances
-const user = await userWire.getInstance(container);
-const syncUser = userWire.getInstanceSync(container);
+// Feature flags
+const featureFlagsWire = typeWireOf({
+  token: 'FeatureFlags',
+  imports: { config: baseConfigWire },
+  createWith: async ({ config }) => {
+    const flags = await loadFlags(config.apiUrl);
+    return createFeatureFlags(flags);
+  }
+});
+```
+
+### Testing
+
+TypeWire makes testing straightforward:
+
+```typescript
+describe('UserService', () => {
+  // Group related wires
+  const baseWires = typeWireGroupOf([
+    loggerWire,
+    userServiceWire
+  ]);
+
+  it('logs user retrieval', async () => {
+    // Override just what you need
+    const testWires = baseWires.withExtraWires([
+      loggerWire.withCreator(() => {
+        const logger = new Logger();
+        vi.spyOn(logger, 'log');
+        return logger;
+      })
+    ]);
+
+    const container = new TypeWireContainer();
+    await testWires.apply(container);
+
+    const userService = await userServiceWire.getInstance(container);
+    const logger = await loggerWire.getInstance(container);
+
+    await userService.getUser('123');
+    expect(logger.log).toHaveBeenCalledWith('Getting user: 123');
+  });
+});
 ```
 
 ## Best Practices
 
-1. **Singleton-First Approach**:
-   - Use singleton scope for most services
-   - Makes code easier to reason about
-   - Better resource management
-   - Clearer separation of concerns
-   - **Encourages behavior abstraction** - When working with singletons, developers naturally focus on what objects do rather than how they're constructed
-   - **Promotes composition** - Singletons make it easier to compose behaviors by providing stable references to components
-   - **Shifts focus from creation to usage** - The emphasis moves from object instantiation to object interaction and behavior
+1. **Clear Boundaries**:
+   - Use TypeWire for long-lived services
+   - Construct context where it's needed
+   - Keep persistent data in proper storage
+   - Make dependencies explicit
 
-2. **Explicit Dependencies**:
-   - Pass dependencies explicitly
-   - Avoid request/context scopes
-   - Makes testing easier
-   - Improves code maintainability
+2. **Smart State Management**:
+   - Separate services from state
+   - Use proper storage for persistence
+   - Keep context close to usage
+   - Control state lifecycles
 
-3. **Async Initialization**:
-   - Handle async setup in creators
-   - Use getAllInstances for parallel loading
-   - Cache results for better performance
+3. **Explicit Dependencies**:
+   - No ambient context
+   - Clear import declarations
+   - Visible dependency paths
+   - Easy to trace and test
 
-4. **Type Safety**:
-   - Define clear interfaces
-   - Use type inference where possible
-   - Leverage TypeScript's type system
+4. **Composition Over Configuration**:
+   - Build complex systems from simple parts
+   - Override behavior where needed
+   - Keep testing simple
+   - Control side effects
 
 ## License
 
