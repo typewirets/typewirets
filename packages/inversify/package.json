@@ -13,7 +13,14 @@
       "require": "./dist/cjs/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "src/*.ts",
+    "!src/**/*.test.ts",
+    "!src/**/__tests__/**",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "pnpm clean && pnpm --filter '@typewirets/inversify' --parallel '/^build:.*/'",
     "build:cjs": "tsc --project tsconfig.build.json --outDir dist/cjs --module Commonjs --moduleResolution Node",
