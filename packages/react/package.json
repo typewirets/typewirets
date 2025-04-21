@@ -13,7 +13,16 @@
       "require": "./dist/cjs/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": [
+    "dist",
+    "src/*.ts",
+    "src/*.tsx",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.tsx",
+    "!src/**/__tests__/**",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "pnpm clean && pnpm --filter '@typewirets/react' --parallel '/^build:.*/'",
     "build:cjs": "tsc --project tsconfig.build.json --outDir dist/cjs --module Commonjs --moduleResolution Node",
