@@ -23,7 +23,7 @@ In addition to the README files in each package, we provide several documents th
 
 - [**Design Philosophy**](./docs/design-philosophy.md) - Understand the principles and decisions behind TypeWire
 - [**DI Solution Guide**](./docs/di-solution-guide.md) - Compare TypeWire with other dependency injection solutions
-- [**Value Proposition**](./docs/value-proposition.md) - Learn about the unique benefits TypeWire offers
+- [**Ecosystem Comparison**](./docs/ecosystem-comparison.md) - Compare TypeWire with other DI libraries in the ecosystem
 
 ## Basic Usage
 

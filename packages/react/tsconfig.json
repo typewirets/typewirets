@@ -1,9 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  "extends": "@typewirets/typescript-config/base.json",
+  "extends": "@typewirets/typescript-config/react-library.json",
   "compilerOptions": {
     "rootDir": "./src",
-    "jsx": "react-jsx",
     "esModuleInterop": true,
     "skipLibCheck": true,
     "target": "ES2020",

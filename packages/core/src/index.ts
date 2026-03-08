@@ -78,11 +78,19 @@ type AnyType = any;
 export type AnyTypeSymbol = TypeSymbol<AnyType>;
 
 /**
+ * The supported dependency lifecycle scopes.
+ *
+ * - `'singleton'` — One instance shared across all resolutions (default)
+ * - `'transient'` — New instance created for each resolution
+ */
+export type TypeWireScope = "singleton" | "transient";
+
+/**
  * Constant representing the singleton scope for dependencies.
  * When a dependency is registered with this scope, the same instance
  * will be returned for all resolutions.
  */
-const ScopeSingleton = "singleton";
+const ScopeSingleton: TypeWireScope = "singleton";
 
 const UnknownTypeSymbol = "unknown";
 
@@ -203,7 +211,7 @@ export interface TypeWire<T> extends Applicable {
    * - 'singleton': One instance shared across all resolutions (default)
    * - 'transient': New instance created for each resolution
    */
-  readonly scope?: string;
+  readonly scope?: TypeWireScope;
 
   /**
    * The creator function that creates instances of type T.
@@ -234,7 +242,7 @@ export interface TypeWire<T> extends Applicable {
    * @param scope The scope to use for the new provider
    * @returns A new provider with the updated scope
    */
-  withScope(scope: string): TypeWire<T>;
+  withScope(scope: TypeWireScope): TypeWire<T>;
 
   /**
    * Creates a new provider with the specified implementation.
@@ -485,7 +493,7 @@ export class StandardTypeWire<T> implements TypeWire<T> {
   constructor(
     readonly type: TypeSymbol<T>,
     readonly creator: Creator<T>,
-    readonly scope?: string,
+    readonly scope?: TypeWireScope,
     readonly imports?: AnyTypeWire[],
   ) {}
   /**
@@ -556,7 +564,7 @@ export class StandardTypeWire<T> implements TypeWire<T> {
    * @param scope The scope to use for the new provider
    * @returns A new provider with the updated scope
    */
-  withScope(scope: string): TypeWire<T> {
+  withScope(scope: TypeWireScope): TypeWire<T> {
     return new StandardTypeWire(this.type, this.creator, scope, this.imports);
   }
 
@@ -637,7 +645,7 @@ export interface TypeWireOpts<T, D extends ImportArrayOrObject> {
    * - 'singleton': One instance shared across all resolutions (default)
    * - 'transient': New instance created for each resolution
    */
-  scope?: string;
+  scope?: TypeWireScope;
 }
 
 /**
