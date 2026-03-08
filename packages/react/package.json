@@ -63,7 +63,7 @@
   },
   "sideEffects": false,
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "peerDependencies": {
     "@types/react": "^16.8 || ^17.0 || ^18.0 || ^19.0",
