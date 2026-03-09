@@ -48,7 +48,7 @@ Every publishable package (`packages/core`, `packages/inversify`, `packages/reac
 ## Type System Conventions
 
 - Use **`unknown`** over `any` wherever possible. The `AnyType` alias exists as a targeted escape hatch and should not spread.
-- The `scope` field on `TypeWire` uses the `TypeWireScope` union type (`'singleton' | 'transient'`). Do not widen it to `string`.
+- The `scope` field on `TypeWire` is typed as `string` intentionally. The built-in scopes are `'singleton'` and `'transient'`, but the type is left open so consumers can define custom scopes (e.g., `'request'` for HTTP request-scoped DI).
 - `TypeSymbol<T>` uses a phantom/branded type pattern intentionally. Do not simplify it to a plain `symbol` alias — see the TSDoc on the type for the rationale.
 - All public interfaces and types should have TSDoc comments. Include `@template`, `@param`, `@returns`, and `@example` tags where they add value. This directly improves autocomplete and inline documentation in editors and AI tools.
 
