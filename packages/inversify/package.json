@@ -48,15 +48,22 @@
     "url": "https://github.com/typewirets/typewirets/issues"
   },
   "homepage": "https://github.com/typewirets/typewirets#readme",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
   "devDependencies": {
     "@typewirets/typescript-config": "workspace:*",
     "@types/node": "^22.13.10",
+    "inversify": "^7.1.0",
     "rimraf": "^6.0.1",
     "typescript": "5.8.2",
     "vitest": "^3.0.8"
   },
+  "peerDependencies": {
+    "inversify": "^7.0.0"
+  },
   "dependencies": {
-    "@typewirets/core": "workspace:*",
-    "inversify": "^7.1.0"
+    "@typewirets/core": "workspace:*"
   }
 }

@@ -71,17 +71,18 @@ export function useTypeWire<T>(typeWire: TypeWire<T>): T {
 
   const promise = typeWire.getInstance(container);
   React.useEffect(() => {
-    let mounted = false;
+    let mounted = true;
 
     promise
       .then((value) => {
         if (mounted) {
-          console.log("we got the value", value);
           setValue(() => value);
         }
       })
       .catch((err) => {
-        console.error(err);
+        if (mounted) {
+          console.error(err);
+        }
       });
     return () => {
       mounted = false;
