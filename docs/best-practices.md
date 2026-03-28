@@ -106,21 +106,49 @@ features/
 
 This separation keeps domain code free of DI concerns and makes it easy to test implementations independently.
 
-### Group related wires
+### Wire groups as capability contracts
 
-Use `typeWireGroupOf` to bundle related wires for batch registration and testing:
+A wire group should represent a **protocol** — a set of wires that together fulfill a capability. It is not a barrel file that re-exports every wire in a directory.
+
+Think of a wire group the way you think of an interface: it declares what a module *provides*, not how it's built internally.
 
 ```typescript
-// auth/auth.wires.ts
-import { AuthServiceWire } from "./auth-service.wire";
-import { TokenServiceWire } from "./token-service.wire";
-
-export const AuthWireGroup = typeWireGroupOf([AuthServiceWire, TokenServiceWire]);
+// config/config.wires.ts
+// This group provides the "config" capability.
+// Consumers depend on this group, not on the individual wires.
+export const ConfigWires = typeWireGroupOf([
+  JsoncConfigRecordWire,
+  ConfigServiceWire,
+]);
 ```
+
+The consumer imports `ConfigWires` and gets a working config system. If the implementation changes later (swap JSONC for YAML), the group still provides the same protocol — only the internal wires change.
+
+```typescript
+// main.wires.ts — composes capabilities, not individual wires
+export const AppWires = typeWireGroupOf([
+  ...ConfigWires.wires,
+  ...AuthWires.wires,
+  ...UserWires.wires,
+]);
+```
+
+**When to create a wire group:**
+
+- The wires form a coherent capability that other modules depend on as a unit
+- Multiple apps or entry points share the same set of wires (e.g., a shared `config` package used by both a server and a CLI)
+- You want to swap an entire capability in tests with `withExtraWires`
+
+**When not to create a wire group:**
+
+- The wires are unrelated and just happen to live in the same directory
+- The app is small enough that a flat `main.wires.ts` listing every wire is clear and manageable
+
+Individual wires should still be exported alongside the group — consumers may need to reference them for overrides or testing.
 
 ### Co-locate wires with features
 
-Place wire files next to the code they configure, not in a central `wires/` directory. This makes it obvious which feature owns which wires.
+Place wire files next to the code they configure, not in a central `wires/` directory. This makes it obvious which feature owns which wires and which capability group they belong to.
 
 ## 4. Scoping
 
