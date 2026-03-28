@@ -84,8 +84,8 @@ export const LoggerWire = typeWireOf({
 
 ### Avoid
 
-- Calling `ctx.getSync()` or `ctx.get()` manually inside creators — use `imports` instead
 - Complex logic inside `creator` lambdas — extract to a named factory function
+- Using `ctx.get()` for dependencies that are known at declaration time — declare them in `imports` so the dependency graph stays explicit and visible. `ctx.get()` is appropriate for dynamic or conditional resolution.
 
 ## 3. File Organization
 
