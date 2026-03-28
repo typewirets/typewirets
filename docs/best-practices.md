@@ -21,7 +21,7 @@ export const UserServiceWire = typeWireOf({
 ```typescript
 // ❌ Avoid unclear or private-style names for exported wires
 export const _loggerWire = typeWireOf({ token: "Logger", creator: () => new Logger() });
-export const logger = typeWireOf({ token: "Logger", creator: () => new Logger() });
+export const loggerWire = typeWireOf({ token: "Logger", creator: () => new Logger() });
 ```
 
 ### Token strings: match the service name
@@ -185,7 +185,53 @@ const RequestContextWire = typeWireOf({ token: "RequestContext", scope: "transie
 
 ## 5. Testing Patterns
 
-### Use `withCreator` to mock individual wires
+### Test the implementation, not the wiring
+
+Unit tests should test your service logic directly. You don't need wires to test a class — just instantiate it with test doubles:
+
+```typescript
+describe("UserService", () => {
+  it("should return a user by id", async () => {
+    const mockDb = { findById: vi.fn().mockResolvedValue({ id: "1", name: "Alice" }) };
+    const service = new UserService(mockDb);
+
+    const user = await service.getUserById("1");
+
+    expect(user).toEqual({ id: "1", name: "Alice" });
+    expect(mockDb.findById).toHaveBeenCalledWith("1");
+  });
+});
+```
+
+This keeps tests fast, focused, and free of DI ceremony. If your service is hard to instantiate without wires, that's a signal the constructor has too many dependencies.
+
+### Use wires for integration tests
+
+When you need to test how services work together through the DI graph, use wires with a real container:
+
+```typescript
+describe("UserService integration", () => {
+  let container: TypeWireContainer;
+
+  beforeEach(async () => {
+    container = new TypeWireContainer();
+    await InMemoryUserServiceWire.apply(container);
+    await UserServiceWire.apply(container);
+  });
+
+  it("should save and retrieve a user", async () => {
+    const userService = await UserServiceWire.getInstance(container);
+    await userService.save({ id: "1", name: "Alice", age: 30 });
+
+    const retrieved = await userService.getUserById("1");
+    expect(retrieved).toEqual({ id: "1", name: "Alice", age: 30 });
+  });
+});
+```
+
+### Use `withCreator` to replace a single wire
+
+When an integration test needs to swap one dependency (e.g., replace a real database with an in-memory fake), use `withCreator`:
 
 ```typescript
 const MockLoggerWire = LoggerWire.withCreator(() => ({
@@ -193,13 +239,31 @@ const MockLoggerWire = LoggerWire.withCreator(() => ({
 }));
 ```
 
-### Use `withExtraWires` on groups to swap implementations
+### Use `withExtraWires` on groups to swap multiple implementations
 
 ```typescript
 const testGroup = AppWireGroup.withExtraWires([MockLoggerWire, MockDbWire]);
 ```
 
+This replaces wires by token — the group's original wires are overridden by the new ones. This is how you swap an entire capability in tests.
+
+### Spy on the original implementation
+
+Use the two-argument form of `withCreator` to wrap the original creator with a spy:
+
+```typescript
+const SpiedLoggerWire = LoggerWire.withCreator(async (ctx, originalCreator) => {
+  const logger = await originalCreator(ctx);
+  vi.spyOn(logger, "log");
+  return logger;
+});
+```
+
+This is useful when you want to verify interactions without replacing the real implementation.
+
 ### Create a shared `setup()` helper
+
+Avoid repeating container setup in every test file:
 
 ```typescript
 async function setup(wireGroup: Applicable) {
@@ -217,7 +281,7 @@ test("user service resolves", async () => {
 
 ### Validate mocks with `satisfies`
 
-Use TypeScript's `satisfies` operator to ensure mock implementations match the real type:
+Use TypeScript's `satisfies` operator to ensure mock implementations match the real type at compile time:
 
 ```typescript
 const mockUser = {
@@ -226,6 +290,16 @@ const mockUser = {
   email: "test@example.com",
 } satisfies User;
 ```
+
+### Summary: when to use what
+
+| Scenario | Approach |
+|---|---|
+| Testing service logic in isolation | Instantiate directly with test doubles — no wires needed |
+| Testing wired services together | Use a container with `apply` + `getInstance` |
+| Replacing one dependency | `withCreator` on the wire |
+| Replacing multiple dependencies | `withExtraWires` on the group |
+| Spying without replacing | Two-argument `withCreator` with `originalCreator` |
 
 ## 6. TypeScript Conventions
 
