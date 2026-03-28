@@ -126,10 +126,10 @@ The consumer imports `ConfigWires` and gets a working config system. If the impl
 
 ```typescript
 // main.wires.ts — composes capabilities, not individual wires
-export const AppWires = typeWireGroupOf([
-  ...ConfigWires.wires,
-  ...AuthWires.wires,
-  ...UserWires.wires,
+export const AppWires = combineWireGroups([
+  ConfigWires,
+  AuthWires,
+  UserWires,
 ]);
 ```
 
