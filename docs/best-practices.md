@@ -2,6 +2,12 @@
 
 Conventions for wire naming, creator patterns, file organization, and testing in TypeWire TypeScript projects.
 
+## Core Concept
+
+**Wires are static definitions; containers are runtime instances.** A wire describes *how* to create a dependency — its token, creator, imports, and scope. It is immutable and can be shared across your entire codebase as a module-level constant. A container is the runtime that resolves those definitions into live instances. You can create multiple containers from the same wires — one per test, one per server, one per worker — each with its own isolated instance cache.
+
+This separation is why wires are safe to export as top-level constants, why `withCreator` and `withExtraWires` return new definitions rather than mutating existing ones, and why each test can use a fresh container without worrying about shared state.
+
 ## 1. Wire Naming
 
 Wire instances are the primary way other modules reference dependencies. Use clear, public names.
