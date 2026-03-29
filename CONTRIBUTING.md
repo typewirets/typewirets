@@ -27,9 +27,6 @@ typewirets/
 │   ├── inversify/      # InversifyJS adapter
 │   ├── react/          # React hooks and context provider
 │   └── typescript-config/  # Shared tsconfig presets
-├── recipes/            # Example applications
-│   ├── express-example/
-│   └── react-trpc-fastify/
 ├── docs/               # Design documents and guides
 ├── MAINTAINING.md      # Maintenance policies and conventions
 └── turbo.json          # Turborepo build orchestration
