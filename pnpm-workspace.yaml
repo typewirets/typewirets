@@ -1,4 +1,6 @@
 packages:
-  - "apps/*"
-  - "packages/*"
-  - "recipes/*"
+  - apps/*
+  - packages/*
+ignoredBuiltDependencies:
+  - '@biomejs/biome'
+  - esbuild

@@ -24,6 +24,7 @@ In addition to the README files in each package, we provide several documents th
 - [**Design Philosophy**](./docs/design-philosophy.md) - Understand the principles and decisions behind TypeWire
 - [**DI Solution Guide**](./docs/di-solution-guide.md) - Compare TypeWire with other dependency injection solutions
 - [**Ecosystem Comparison**](./docs/ecosystem-comparison.md) - Compare TypeWire with other DI libraries in the ecosystem
+- [**Best Practices**](./docs/best-practices.md) - Wire naming, file organization, testing patterns, and TypeScript conventions
 
 ## Basic Usage
 
@@ -163,6 +164,10 @@ test('userService logs when retrieving user', async () => {
 });
 
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for development setup and guidelines.
 
 ## License
 
