@@ -39,13 +39,41 @@ The monorepo is managed by **pnpm workspaces** and **Turborepo**.
 
 ## Development Commands
 
+All build and test tasks are orchestrated by [Turborepo](https://turbo.build/repo). Turbo understands the dependency graph between packages — for example, `@typewirets/inversify` and `@typewirets/react` depend on `@typewirets/core`, so `turbo run build` builds core first, then its dependents in parallel.
+
+### Running tasks across all packages
+
 | Command | Description |
 |---|---|
-| `pnpm build` | Build all packages |
+| `pnpm build` | Build all packages (respects dependency order) |
 | `pnpm test` | Run all tests (vitest) |
 | `pnpm lint` | Lint with Biome |
 | `pnpm fmt` | Format with Biome |
 | `pnpm check-types` | TypeScript type checking across all packages |
+
+These commands invoke `turbo run <task>` under the hood (see `package.json` scripts).
+
+### Build caching
+
+Turbo caches task results locally. If the source files for a package haven't changed since the last run, the task is skipped and the cached output is replayed. You'll see `cache hit` in the output when this happens, and `FULL TURBO` when every task was cached.
+
+To bypass the cache and force a fresh run:
+
+```bash
+pnpm build -- --force
+```
+
+### Running tasks for a single package
+
+For faster iteration, you can target a specific package using pnpm's `--filter`:
+
+```bash
+pnpm --filter @typewirets/core test
+pnpm --filter @typewirets/react build
+pnpm --filter @typewirets/inversify check-types
+```
+
+This is the recommended workflow during development — run only what you're working on, and let CI validate the full build.
 
 ## Code Style
 
