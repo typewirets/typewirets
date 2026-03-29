@@ -39,7 +39,7 @@ The monorepo is managed by **pnpm workspaces** and **Turborepo**.
 
 ## Development Commands
 
-All build and test tasks are orchestrated by [Turborepo](https://turbo.build/repo). Turbo understands the dependency graph between packages — for example, `@typewirets/inversify` and `@typewirets/react` depend on `@typewirets/core`, so `turbo run build` builds core first, then its dependents in parallel.
+All build and test tasks are orchestrated by [Turborepo](https://turborepo.dev). Turbo understands the dependency graph between packages (defined by `dependsOn` in `turbo.json`) — for example, `@typewirets/inversify` and `@typewirets/react` depend on `@typewirets/core`, so `turbo run build` builds core first, then its dependents in parallel.
 
 ### Running tasks across all packages
 
@@ -55,9 +55,9 @@ These commands invoke `turbo run <task>` under the hood (see `package.json` scri
 
 ### Build caching
 
-Turbo caches task results locally. If the source files for a package haven't changed since the last run, the task is skipped and the cached output is replayed. You'll see `cache hit` in the output when this happens, and `FULL TURBO` when every task was cached.
+Turbo caches task results locally based on file inputs, environment variables, and task configuration. When source files haven't changed since the last run, turbo replays the cached output instead of re-executing. You'll see `cache hit` in the output for individual cached tasks, and `>>> FULL TURBO` when every task was cached.
 
-To bypass the cache and force a fresh run:
+To bypass the cache and force re-execution of all tasks:
 
 ```bash
 pnpm build -- --force
@@ -65,15 +65,21 @@ pnpm build -- --force
 
 ### Running tasks for a single package
 
-For faster iteration, you can target a specific package using pnpm's `--filter`:
+For faster iteration during development, use turbo's `--filter` flag to target a specific package:
+
+```bash
+pnpm build -- --filter=@typewirets/core
+pnpm test -- --filter=@typewirets/react
+pnpm check-types -- --filter=@typewirets/inversify
+```
+
+You can also use pnpm's `--filter` to run any script directly in a specific package, bypassing turbo:
 
 ```bash
 pnpm --filter @typewirets/core test
-pnpm --filter @typewirets/react build
-pnpm --filter @typewirets/inversify check-types
 ```
 
-This is the recommended workflow during development — run only what you're working on, and let CI validate the full build.
+The turbo `--filter` approach is preferred when you want caching and dependency-aware execution. Use pnpm `--filter` when you want to run a script directly without turbo orchestration.
 
 ## Code Style
 
