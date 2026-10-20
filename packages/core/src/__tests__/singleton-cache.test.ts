@@ -6,10 +6,8 @@ import type { BindingContext, ResolutionContext } from "../index";
 // container come from two copies of the package.
 function delegatingBinder(
   container: TypeWireContainer,
-  replacesOnBind?: boolean,
 ): BindingContext & ResolutionContext {
   return {
-    replacesOnBind,
     bind: (wire) => container.bind(wire),
     unbind: (type) => container.unbind(type),
     isBound: (type) => container.isBound(type),
@@ -150,32 +148,18 @@ describe("singleton cache", () => {
       });
     });
 
-    it("keeps the cached value on any binder that replaces on bind", async () => {
-      const original = typeWireOf({
-        token: "t.W",
-        creator: () => ({ from: "original" }),
-      });
-      const binder = delegatingBinder(new TypeWireContainer(), true);
-      await original.apply(binder);
-      const first = await original.getInstance(binder);
-
-      await original.withCreator(() => ({ from: "override" })).apply(binder);
-
-      expect(await original.getInstance(binder)).toBe(first);
-    });
-
-    it("unbinds first on a binder that does not declare replacesOnBind", async () => {
+    it("leaves the cache to the container, not to apply", async () => {
       const original = typeWireOf({
         token: "t.W",
         creator: () => ({ from: "original" }),
       });
       const binder = delegatingBinder(new TypeWireContainer());
       await original.apply(binder);
-      await original.getInstance(binder);
+      const first = await original.getInstance(binder);
 
       await original.withCreator(() => ({ from: "override" })).apply(binder);
 
-      expect(await original.getInstance(binder)).toEqual({ from: "override" });
+      expect(await original.getInstance(binder)).toBe(first);
     });
 
     it("discards the cached value on an explicit unbind", async () => {

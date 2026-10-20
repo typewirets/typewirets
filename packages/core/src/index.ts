@@ -131,21 +131,13 @@ export interface ResolutionContext {
  */
 export interface BindingContext {
   /**
-   * Whether `bind` replaces an existing binding for the same type in place,
-   * keeping any value already created for it.
-   *
-   * When true, `TypeWire.apply` binds an already-bound type without unbinding
-   * it first, so the cached value survives a re-apply. When absent or false,
-   * `apply` unbinds the type before binding, which discards the cached value.
-   */
-  readonly replacesOnBind?: boolean;
-
-  /**
-   * Binds a Typewire to the container.
+   * Binds a Typewire to the container, replacing any existing binding for the
+   * same type. What happens to a value the container already created for that
+   * type is up to the container.
    *
    * @param typeWire The Typewire to bind
    */
-  bind(typeWire: AnyTypeWire): void;
+  bind(typeWire: AnyTypeWire): void | Promise<void>;
 
   /**
    * Removes a binding from the container.
@@ -501,11 +493,11 @@ export class StandardTypeWire<T> implements TypeWire<T> {
   /**
    * Registers this provider with a dependency binder.
    *
-   * On a binder whose `replacesOnBind` is true, such as `TypeWireContainer`,
-   * re-applying a wire for a token that is already bound replaces the binding
-   * but keeps any value already created (or being created) for that token, so
-   * the new binding only takes effect for values not yet created in that
-   * container. Call `unbind` first to discard the cached value.
+   * The binder owns its cached values: on a `TypeWireContainer`, re-applying a
+   * wire for a token that is already bound replaces the binding but keeps any
+   * value already created (or being created) for that token, so the new
+   * binding only takes effect for values not yet created in that container.
+   * Call `unbind` first to discard the cached value.
    *
    * @param binder The dependency binder to register with
    * @returns A promise that resolves when registration is complete
@@ -519,13 +511,7 @@ export class StandardTypeWire<T> implements TypeWire<T> {
       }
     }
 
-    // Unbinding discards the cached value, so only do it for binders whose
-    // bind would otherwise add a second binding for the same type.
-    if (binder.isBound(this.type) && !binder.replacesOnBind) {
-      await binder.unbind(this.type);
-    }
-
-    binder.bind(this);
+    await binder.bind(this);
   }
 
   /**
@@ -1433,11 +1419,6 @@ class ScopedResolutionContext implements ResolutionContext {
  * will work correctly without being mistakenly identified as circular dependencies.
  */
 export class TypeWireContainer implements ResolutionContext, BindingContext {
-  /**
-   * `bind` replaces an existing binding and keeps its cached value.
-   */
-  readonly replacesOnBind = true;
-
   /**
    * Internal state management for bindings, singletons, and resolutions
    */
