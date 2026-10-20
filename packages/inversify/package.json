@@ -13,14 +13,14 @@
       "require": "./dist/cjs/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": ["dist", "README.md", "CHANGELOG.md", "LICENSE"],
   "scripts": {
     "build": "pnpm clean && pnpm --filter '@typewirets/inversify' --parallel '/^build:.*/'",
-    "build:cjs": "tsc --project tsconfig.build.json --outDir dist/cjs --module Commonjs --moduleResolution Node",
+    "build:cjs": "node ../../scripts/write-cjs-package-json.mjs && tsc --project tsconfig.build.json --outDir dist/cjs --module Commonjs --moduleResolution Node",
     "build:esm": "tsc --project tsconfig.build.json --outDir dist/esm --module ES2020 --moduleResolution Node",
     "build:types": "tsc --project tsconfig.build.json --outDir dist/types --declaration --declarationMap",
     "dev": "pnpm clean && pnpm --filter '@typewirets/inversify' --parallel '/^dev:.*/'",
-    "dev:cjs": "tsc --watch --project tsconfig.build.json --outDir dist/cjs --module Commonjs --moduleResolution Node",
+    "dev:cjs": "node ../../scripts/write-cjs-package-json.mjs && tsc --watch --project tsconfig.build.json --outDir dist/cjs --module Commonjs --moduleResolution Node",
     "dev:esm": "tsc --watch --project tsconfig.build.json --outDir dist/esm --module ES2020 --moduleResolution Node",
     "dev:types": "tsc --watch --project tsconfig.build.json --outDir dist/types --declaration --declarationMap",
     "clean": "rimraf dist",

@@ -52,6 +52,9 @@ jobs:
     - name: Build
       run: pnpm build
 
+    - name: Check CommonJS entry points
+      run: node scripts/check-cjs-entry-points.mjs
+
     - name: Type Check
       run: pnpm check-types
 
