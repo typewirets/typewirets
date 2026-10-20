@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.1
 
 Fixes three singleton-cache behaviours that diverged from the typewire contract shared with the Python and Go ports.
 
