@@ -491,6 +491,12 @@ export class StandardTypeWire<T> implements TypeWire<T> {
   /**
    * Registers this provider with a dependency binder.
    *
+   * On a `TypeWireContainer`, re-applying a wire for a token that is already
+   * bound replaces the binding but keeps any value already created (or being
+   * created) for that token, so the new binding only takes effect for values
+   * not yet created in that container. Call `unbind` first to discard the
+   * cached value.
+   *
    * @param binder The dependency binder to register with
    * @returns A promise that resolves when registration is complete
    */
@@ -503,7 +509,10 @@ export class StandardTypeWire<T> implements TypeWire<T> {
       }
     }
 
-    if (binder.isBound(this.type)) {
+    // TypeWireContainer.bind replaces a binding in place and keeps the cached
+    // value; unbinding it first would discard that value. Other binders may
+    // not replace on bind, so they are still unbound first.
+    if (binder.isBound(this.type) && !(binder instanceof TypeWireContainer)) {
       await binder.unbind(this.type);
     }
 
@@ -1210,7 +1219,8 @@ class ResolutionState {
   }
 
   /**
-   * Registers a new TypeWire binding.
+   * Registers a TypeWire binding, replacing any existing binding for the same symbol.
+   * A singleton instance or in-flight resolution already held for the symbol is kept.
    * @param wire The TypeWire instance to register
    */
   bind(wire: AnyTypeWire): void {
@@ -1226,6 +1236,16 @@ class ResolutionState {
     this.bindings.delete(typeSymbol.symbol);
     this.singletons.delete(typeSymbol.symbol);
     this.resolutions.delete(typeSymbol.symbol);
+  }
+
+  /**
+   * Checks if a singleton instance is cached for a type symbol.
+   * A cached instance may be any value, including falsy ones such as `0` or `null`.
+   * @param typeSymbol The type symbol to check
+   * @returns true if a singleton instance is cached, false otherwise
+   */
+  hasSingletonValue(typeSymbol: AnyTypeSymbol): boolean {
+    return this.singletons.has(typeSymbol.symbol);
   }
 
   /**
@@ -1326,9 +1346,8 @@ class ScopedResolutionContext implements ResolutionContext {
       const scope = binding.scope ?? ScopeSingleton;
 
       if (scope === ScopeSingleton) {
-        const singleton = this.resolutionState.getSingletonValue(typeSymbol);
-        if (singleton) {
-          return singleton as T;
+        if (this.resolutionState.hasSingletonValue(typeSymbol)) {
+          return this.resolutionState.getSingletonValue(typeSymbol) as T;
         }
 
         const resolver = this.resolutionState.getRunningResolver(typeSymbol);
@@ -1368,9 +1387,8 @@ class ScopedResolutionContext implements ResolutionContext {
       const scope = binding.scope ?? ScopeSingleton;
 
       if (scope === ScopeSingleton) {
-        const singleton = this.resolutionState.getSingletonValue(typeSymbol);
-        if (singleton) {
-          return singleton as T;
+        if (this.resolutionState.hasSingletonValue(typeSymbol)) {
+          return this.resolutionState.getSingletonValue(typeSymbol) as T;
         }
 
         const result = creator(this);
@@ -1459,7 +1477,8 @@ export class TypeWireContainer implements ResolutionContext, BindingContext {
   }
 
   /**
-   * Binds a provider to the container.
+   * Binds a provider to the container, replacing any existing binding for the same type.
+   * A singleton instance already created for the type is kept; use `unbind` to discard it.
    * @param provider The provider to bind
    */
   bind(wire: AnyTypeWire): void {

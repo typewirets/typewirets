@@ -1,6 +1,6 @@
 {
   "name": "@typewirets/core",
-  "version": "0.0.0",
+  "version": "0.1.1",
   "description": "A lightweight, container-agnostic dependency injection library for TypeScript",
   "type": "module",
   "main": "dist/cjs/index.js",
@@ -13,7 +13,7 @@
       "import": "./dist/esm/index.js"
     }
   },
-  "files": ["dist", "README.md", "LICENSE"],
+  "files": ["dist", "README.md", "CHANGELOG.md", "LICENSE"],
   "scripts": {
     "build": "pnpm clean && pnpm --filter '@typewirets/core' --parallel '/^build:.*/'",
     "build:cjs": "tsc --project tsconfig.build.json --outDir dist/cjs --module Commonjs --moduleResolution Node",
