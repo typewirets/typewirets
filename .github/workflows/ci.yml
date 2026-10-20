@@ -52,6 +52,18 @@ jobs:
     - name: Build
       run: pnpm build
 
+    - name: Check CommonJS entry points
+      run: |
+        node -e '
+          for (const p of ["core", "inversify", "react"]) {
+            const m = require("./packages/" + p);
+            if (Object.keys(m).length === 0) {
+              throw new Error(`@typewirets/${p}: require() returned no exports`);
+            }
+          }
+          console.log("CommonJS entry points load");
+        '
+
     - name: Type Check
       run: pnpm check-types
 

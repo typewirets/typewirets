@@ -2,11 +2,12 @@
 
 ## 0.1.1
 
-Fixes three singleton-cache behaviours that diverged from the typewire contract shared with the Python and Go ports.
+Fixes three singleton-cache behaviours that diverged from the typewire contract shared with the Python and Go ports, and fixes loading the package with CommonJS `require()`.
 
 - **A singleton whose value is falsy is still cached.** The cache lookup tested the stored value for truthiness, so a creator returning `0`, `""`, `false`, `null` or `undefined` ran again on every resolve. The lookup now checks whether an entry exists.
 - **An override applied after the singleton is cached has no effect on that value.** `apply` (including `wire.withCreator(...).apply(container)`) unbound the existing token before binding the new wire, which also threw away the cached value. `apply` now only calls `bind`, and the container decides what happens to a value it already holds. `TypeWireContainer.bind` replaces the binding but keeps a value that already exists or is still being created, so the new binding only affects values not yet created in that container. An override applied before the first resolve still takes effect. To discard a cached value on purpose, call `container.unbind(wire.type)` before re-applying.
 - **An override of an import applied after the importer is cached leaves the importer's value alone.** Because of the same `apply` change, the import keeps the instance already built through the importer, so callers that hold the importer and callers that resolve the import directly get the same value.
+- **CommonJS `require()` works.** The package is `"type": "module"`, so Node loaded the CommonJS build in `dist/cjs` as an ES module: `require()` from plain Node (TypeScript compiled to CommonJS, ts-node) threw `ReferenceError: exports is not defined`. Bundlers, Jest and ESM `import` were not affected. The build now writes `dist/cjs/package.json` with `{"type":"commonjs"}`.
 
 ### Notes for `BindingContext` implementers
 
