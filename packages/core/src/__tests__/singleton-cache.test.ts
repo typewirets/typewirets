@@ -1,5 +1,22 @@
 import { describe, it, expect } from "vitest";
 import { TypeWireContainer, typeWireOf } from "../index";
+import type { BindingContext, ResolutionContext } from "../index";
+
+// A binder that is not a TypeWireContainer instance, as when the wire and the
+// container come from two copies of the package.
+function delegatingBinder(
+  container: TypeWireContainer,
+  replacesOnBind?: boolean,
+): BindingContext & ResolutionContext {
+  return {
+    replacesOnBind,
+    bind: (wire) => container.bind(wire),
+    unbind: (type) => container.unbind(type),
+    isBound: (type) => container.isBound(type),
+    get: (type) => container.get(type),
+    getSync: (type) => container.getSync(type),
+  };
+}
 
 // Regression tests for the singleton-cache rules shared by the typewire ports.
 // P3: a singleton's value is cached once created, whatever the value is.
@@ -131,6 +148,34 @@ describe("singleton cache", () => {
       expect(await svc.getInstance(container)).toEqual({
         built: { from: "override" },
       });
+    });
+
+    it("keeps the cached value on any binder that replaces on bind", async () => {
+      const original = typeWireOf({
+        token: "t.W",
+        creator: () => ({ from: "original" }),
+      });
+      const binder = delegatingBinder(new TypeWireContainer(), true);
+      await original.apply(binder);
+      const first = await original.getInstance(binder);
+
+      await original.withCreator(() => ({ from: "override" })).apply(binder);
+
+      expect(await original.getInstance(binder)).toBe(first);
+    });
+
+    it("unbinds first on a binder that does not declare replacesOnBind", async () => {
+      const original = typeWireOf({
+        token: "t.W",
+        creator: () => ({ from: "original" }),
+      });
+      const binder = delegatingBinder(new TypeWireContainer());
+      await original.apply(binder);
+      await original.getInstance(binder);
+
+      await original.withCreator(() => ({ from: "override" })).apply(binder);
+
+      expect(await original.getInstance(binder)).toEqual({ from: "override" });
     });
 
     it("discards the cached value on an explicit unbind", async () => {

@@ -66,6 +66,12 @@ export class InversifyAdapter
   private readonly singletons: Set<symbol> = new Set();
 
   /**
+   * `bind` adds an InversifyJS binding rather than replacing one, so
+   * `TypeWire.apply` unbinds an already-bound type first.
+   */
+  readonly replacesOnBind = false;
+
+  /**
    * Creates a new InversifyAdapter for the specified container.
    *
    * @param container - The InversifyJS container to adapt

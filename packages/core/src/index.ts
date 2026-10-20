@@ -131,6 +131,16 @@ export interface ResolutionContext {
  */
 export interface BindingContext {
   /**
+   * Whether `bind` replaces an existing binding for the same type in place,
+   * keeping any value already created for it.
+   *
+   * When true, `TypeWire.apply` binds an already-bound type without unbinding
+   * it first, so the cached value survives a re-apply. When absent or false,
+   * `apply` unbinds the type before binding, which discards the cached value.
+   */
+  readonly replacesOnBind?: boolean;
+
+  /**
    * Binds a Typewire to the container.
    *
    * @param typeWire The Typewire to bind
@@ -491,11 +501,11 @@ export class StandardTypeWire<T> implements TypeWire<T> {
   /**
    * Registers this provider with a dependency binder.
    *
-   * On a `TypeWireContainer`, re-applying a wire for a token that is already
-   * bound replaces the binding but keeps any value already created (or being
-   * created) for that token, so the new binding only takes effect for values
-   * not yet created in that container. Call `unbind` first to discard the
-   * cached value.
+   * On a binder whose `replacesOnBind` is true, such as `TypeWireContainer`,
+   * re-applying a wire for a token that is already bound replaces the binding
+   * but keeps any value already created (or being created) for that token, so
+   * the new binding only takes effect for values not yet created in that
+   * container. Call `unbind` first to discard the cached value.
    *
    * @param binder The dependency binder to register with
    * @returns A promise that resolves when registration is complete
@@ -509,10 +519,9 @@ export class StandardTypeWire<T> implements TypeWire<T> {
       }
     }
 
-    // TypeWireContainer.bind replaces a binding in place and keeps the cached
-    // value; unbinding it first would discard that value. Other binders may
-    // not replace on bind, so they are still unbound first.
-    if (binder.isBound(this.type) && !(binder instanceof TypeWireContainer)) {
+    // Unbinding discards the cached value, so only do it for binders whose
+    // bind would otherwise add a second binding for the same type.
+    if (binder.isBound(this.type) && !binder.replacesOnBind) {
       await binder.unbind(this.type);
     }
 
@@ -1424,6 +1433,11 @@ class ScopedResolutionContext implements ResolutionContext {
  * will work correctly without being mistakenly identified as circular dependencies.
  */
 export class TypeWireContainer implements ResolutionContext, BindingContext {
+  /**
+   * `bind` replaces an existing binding and keeps its cached value.
+   */
+  readonly replacesOnBind = true;
+
   /**
    * Internal state management for bindings, singletons, and resolutions
    */
