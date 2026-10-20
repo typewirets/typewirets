@@ -121,12 +121,17 @@ export class InversifyAdapter
   }
 
   /**
-   * Binds a TypeWire to the InversifyJS container.
+   * Binds a TypeWire to the InversifyJS container, replacing any existing
+   * binding for the same type (which also discards its cached instance).
    * Configures the binding with the appropriate scope and creator function.
    *
    * @param typeWire - The TypeWire to bind
    */
-  bind(typeWire: AnyTypeWire): void | Promise<void> {
+  async bind(typeWire: AnyTypeWire): Promise<void> {
+    if (this.isBound(typeWire.type)) {
+      await this.unbind(typeWire.type);
+    }
+
     const bound = this.container
       .bind(typeWire.type.symbol)
       .toDynamicValue((_ctx) => {
