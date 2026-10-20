@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.1
+## Unreleased
 
 Fixes three singleton-cache behaviours that diverged from the typewire contract shared with the Python and Go ports. The only API change is the new optional `BindingContext.replacesOnBind` flag. Existing binders that don't set it behave as before.
 
