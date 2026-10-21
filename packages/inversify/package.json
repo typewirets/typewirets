@@ -50,11 +50,11 @@
   "homepage": "https://github.com/typewirets/typewirets#readme",
   "sideEffects": false,
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "devDependencies": {
+    "@types/node": "^24.19.2",
     "@typewirets/typescript-config": "workspace:*",
-    "@types/node": "^22.13.10",
     "inversify": "^7.1.0",
     "rimraf": "^6.0.1",
     "typescript": "5.8.2",

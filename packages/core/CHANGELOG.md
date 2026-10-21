@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Requires Node.js 24 or later.** `engines.node` is now `>=24` (was `>=20`), following the active LTS line. Node 20 reached end of life in April 2026, and Node 22 is in maintenance until April 2027.
+
 ## 0.1.1
 
 Fixes three singleton-cache behaviours that diverged from the typewire contract shared with the Python and Go ports, and fixes loading the package with CommonJS `require()`.
