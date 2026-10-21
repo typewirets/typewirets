@@ -2,11 +2,12 @@
 
 ## Prerequisites
 
-- **Node.js** >= 20 (active LTS)
-- **Corepack** enabled — this auto-installs the correct pnpm version:
+- **Node.js** 24 (active LTS), as used in CI. With Nix, `nix develop` (or direnv with the repo's `.envrc`) provides Node 24 and pnpm.
+- **Corepack** enabled — this auto-installs the pnpm version pinned in `package.json` (`packageManager`):
   ```bash
   corepack enable
   ```
+  pnpm 12 needs Corepack 0.36 or later, which Node 24 bundles. Older Corepack (such as the one bundled with Node 22) fails with `Cannot find module …/pnpm.cjs`; run `npm install -g corepack@latest` if you're on an older Node.
 
 ## Getting Started
 

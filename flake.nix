@@ -2,7 +2,7 @@
   description = "typewirets falke";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -22,7 +22,8 @@
 
         devShell = pkgs.mkShell {
           buildInputs = [
-            pkgs.nodejs_22
+            pkgs.nodejs_24
+            pkgs.pnpm_12
           ];
         };
       }
