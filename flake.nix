@@ -1,8 +1,8 @@
 {
-  description = "typewirets falke";
+  description = "typewirets flake";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
     flake-utils.url = "github:numtide/flake-utils";
   };
 
@@ -20,9 +20,9 @@
       {
         formatter = pkgs.nixpkgs-fmt;
 
-        devShell = pkgs.mkShell {
+        devShells.default = pkgs.mkShell {
           buildInputs = [
-            pkgs.nodejs_22
+            pkgs.nodejs_24
           ];
         };
       }

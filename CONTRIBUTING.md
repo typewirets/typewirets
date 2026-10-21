@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Node.js** >= 20 (active LTS)
+- **Node.js** 24 (current LTS; used by CI and the Nix dev shell — `nix develop` or direnv with `use flake`)
 - **Corepack** enabled — this auto-installs the correct pnpm version:
   ```bash
   corepack enable
