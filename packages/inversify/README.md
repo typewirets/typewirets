@@ -156,6 +156,19 @@ await loggerWire.apply(adapter);  // Note the await
 const logger = loggerWire.getInstance(adapter);
 ```
 
+## Re-applying a Wire
+
+Re-applying a wire for a token that is already bound replaces the Inversify binding, and **rebuilds the value**. This is not how `TypeWireContainer` behaves:
+
+| | `TypeWireContainer` | Inversify adapter |
+|---|---|---|
+| Re-apply before the first resolve | New binding is used | New binding is used |
+| Re-apply after the value was created | Cached value is kept | Cached value is discarded; the next resolve runs the new binding's creator |
+
+The adapter rebinds by calling Inversify's `unbind`, which drops the cached instance (and runs any deactivation handlers registered on that binding). Code that holds the old instance keeps it, so it and the next resolve can see two different instances.
+
+Replacing a binding is asynchronous, because Inversify's `unbind` is. Always await `apply`, or `bind` when you call it directly: a call that is not awaited registers the new binding after the old one has been removed, so a resolve in between fails with a missing binding. Binding a token that is not bound yet happens synchronously.
+
 ## Scope Mapping and Behavior
 
 The adapter automatically maps TypeWire scopes to Inversify binding scopes:

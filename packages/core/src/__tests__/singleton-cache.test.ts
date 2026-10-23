@@ -148,6 +148,37 @@ describe("singleton cache", () => {
       });
     });
 
+    it("keeps a creation in flight when an override is applied during it", async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const original = typeWireOf({
+        token: "t.W",
+        creator: async () => {
+          await gate;
+          return { from: "original" };
+        },
+      });
+      let overrideCalls = 0;
+      const container = new TypeWireContainer();
+      await original.apply(container);
+
+      const inFlight = original.getInstance(container);
+      await original
+        .withCreator(() => {
+          overrideCalls += 1;
+          return { from: "override" };
+        })
+        .apply(container);
+      release();
+
+      const first = await inFlight;
+      expect(first).toEqual({ from: "original" });
+      expect(await original.getInstance(container)).toBe(first);
+      expect(overrideCalls).toBe(0);
+    });
+
     it("leaves the cache to the container, not to apply", async () => {
       const original = typeWireOf({
         token: "t.W",

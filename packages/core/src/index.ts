@@ -497,7 +497,9 @@ export class StandardTypeWire<T> implements TypeWire<T> {
    * wire for a token that is already bound replaces the binding but keeps any
    * value already created (or being created) for that token, so the new
    * binding only takes effect for values not yet created in that container.
-   * Call `unbind` first to discard the cached value.
+   * Call `unbind` first to discard the cached value. An override that changes
+   * the scope does not keep it: a singleton re-applied as `transient` runs the
+   * new creator on every resolve.
    *
    * @param binder The dependency binder to register with
    * @returns A promise that resolves when registration is complete
@@ -706,8 +708,8 @@ export function typeWireOf<T, D extends ImportArrayOrObject = AnyType>(
 
 /**
  * Factory function type for creating monitor instances per resolution request.
- * This allows for creating fresh, isolated monitor instances for each dependency
- * resolution chain, preventing cross-talk between concurrent resolutions.
+ * The container calls it once per top-level `get`/`getSync` call; every
+ * resolution made while serving that request uses the monitor it returns.
  *
  * @param opts The resolution request context information
  * @returns A new monitor instance for this specific resolution request
@@ -732,8 +734,7 @@ export interface TypeWireContianerOpts {
 
 /**
  * Default implementation of the monitor factory that creates a new CircularDependencyMonitor
- * for each resolution request. This ensures each resolution chain gets its own
- * isolated monitor instance.
+ * for each resolution request.
  *
  * @param opts The resolution request context
  * @returns A new CircularDependencyMonitor instance
@@ -759,10 +760,9 @@ export type SyncAction<T> = () => T;
 export type AsyncAction<T> = () => T | Promise<T>;
 
 /**
- * Represents a single resolution request context.
- * This interface provides information about a specific dependency resolution chain,
- * allowing monitors to track and manage resolution state per request instead of globally.
- * Each resolution chain gets its own unique identifier to prevent cross-request interference.
+ * Represents a single resolution request: one top-level `get`/`getSync` call
+ * on a container, including every resolution made while serving it.
+ * Each request gets its own unique identifier, so errors can be correlated with it.
  */
 export interface ResolutionRequest {
   /**
@@ -779,12 +779,17 @@ export interface ResolutionRequest {
 }
 
 /**
- * Monitors dependency resolution to detect issues and collect information for a single resolution request.
- * Each monitor instance is tied to a specific resolution chain, allowing it to track dependencies
- * and detect circular references within that isolated context. This per-request design prevents
- * false positives when multiple concurrent resolutions occur.
+ * Observes dependency resolution for a single resolution request.
  *
- * This interface allows for custom monitoring implementations with different detection strategies.
+ * The container creates one monitor per top-level `get`/`getSync` call. Every
+ * resolution made while serving that request goes through it, including the
+ * resolutions of concurrent branches (a creator that resolves several imports
+ * at once), so a monitor must not assume that calls are nested.
+ *
+ * Circular dependency detection does not depend on the monitor: the container
+ * checks each branch's own chain, whatever monitor is configured.
+ *
+ * This interface allows for custom monitoring implementations (logging, tracing, metrics).
  */
 export interface ResolutionRequestMonitor {
   /**
@@ -812,138 +817,69 @@ export interface ResolutionRequestMonitor {
 }
 
 /**
- * Tracks dependency resolution and detects circular dependencies within a single resolution chain.
- * This is the default implementation of ResolutionRequestMonitor.
+ * The default implementation of ResolutionRequestMonitor. It tags every
+ * TypeWireError raised while serving its request with the request's id.
  *
- * Each monitor instance is tied to a specific resolution chain/request and maintains its own
- * independent tracking state. This isolation prevents false positives that would occur with
- * a global monitor when concurrent resolutions happen for the same dependency.
+ * Despite its name, this monitor no longer detects circular dependencies
+ * itself: a single stack shared by one request mistook concurrent sibling
+ * resolutions for a cycle. The container now detects cycles for every request
+ * (see {@link TypeWireContainer}), keeping one chain per branch.
  */
 export class CircularDependencyMonitor implements ResolutionRequestMonitor {
   private readonly requestId: symbol;
 
   /**
-   * Set of symbols currently being resolved.
-   */
-  private readonly resolutionSet: Set<symbol> = new Set();
-
-  /**
-   * The current resolution path.
-   */
-  private readonly resolutionStack: TypeSymbol<unknown>[] = [];
-
-  /**
-   * Optional limit on how many path items to display in error messages.
-   */
-  private readonly numberOfPathsToPrint?: number;
-
-  /**
    * Creates a new CircularDependencyMonitor.
-   * @param opts Configuration options for the monitor
+   * @param opts Configuration options for the monitor. `numberOfPathsToPrint`
+   *   is accepted for compatibility; the container formats resolution paths.
    */
   constructor(opts: {
     requestId: symbol;
     numberOfPathsToPrint?: number;
   }) {
     this.requestId = opts.requestId;
-    this.numberOfPathsToPrint = opts.numberOfPathsToPrint;
   }
 
-  /**
-   * Adds a type symbol to the resolution set and stack.
-   * @param typeSymbol The type symbol to add
-   */
-  private add(typeSymbol: TypeSymbol<unknown>) {
-    this.resolutionSet.add(typeSymbol.symbol);
-    this.resolutionStack.push(typeSymbol);
-  }
-
-  /**
-   * Removes a type symbol to the resolution set and stack.
-   * @param typeSymbol The type symbol to add
-   */
-  private remove(typeSymbol: TypeSymbol<unknown>) {
-    this.resolutionSet.delete(typeSymbol.symbol);
-    this.resolutionStack.pop();
-  }
-
-  private hasInStack(typeSymbol: TypeSymbol<unknown>): boolean {
-    return this.resolutionSet.has(typeSymbol.symbol);
-  }
-
-  /**
-   * Monitors the resolution of a type symbol to detect circular dependencies.
-   * @template T The type being resolved
-   * @param typeSymbol The type symbol being resolved
-   * @param action The action to perform
-   * @returns The result of the action
-   * @throws Error if a circular dependency is detected
-   */
-  monitor<T>(typeSymbol: TypeSymbol<T>, action: SyncAction<T>): T {
-    try {
-      if (this.hasInStack(typeSymbol)) {
-        this.add(typeSymbol);
-        throw TypeWireError.circularDependency();
-      }
-
-      this.add(typeSymbol);
-      return action();
-    } catch (err) {
-      if (err instanceof TypeWireError) {
-        err.requestId = this.requestId;
-        if (!err.message) {
-          err.message = getErrorMessage({
-            reason: err.reason,
-            stack: this.resolutionStack,
-            numberOfPathsToPrint: this.numberOfPathsToPrint,
-          });
-        }
-      }
-      throw err;
-    } finally {
-      this.remove(typeSymbol);
+  private tag(err: unknown) {
+    if (err instanceof TypeWireError) {
+      err.requestId = this.requestId;
     }
   }
 
   /**
-   * Tracks an asynchronous dependency resolution, detecting circular dependencies.
+   * Runs a synchronous resolution, tagging a TypeWireError it throws with the request id.
+   * @template T The type being resolved
+   * @param _typeSymbol The type symbol being resolved
+   * @param action The action to perform
+   * @returns The result of the action
+   * @throws {TypeWireError | Error} If the action throws
+   */
+  monitor<T>(_typeSymbol: TypeSymbol<T>, action: SyncAction<T>): T {
+    try {
+      return action();
+    } catch (err) {
+      this.tag(err);
+      throw err;
+    }
+  }
+
+  /**
+   * Runs an asynchronous resolution, tagging a TypeWireError it throws with the request id.
    * @template T The type of the resolution result
-   * @param typeSymbol The typed symbol being resolved
+   * @param _typeSymbol The typed symbol being resolved
    * @param action The asynchronous resolution function to execute
    * @returns A promise that resolves to the result of the resolution function
-   * @throws {TypeWireError | Error} If a circular dependency is detected or action throws
+   * @throws {TypeWireError | Error} If the action throws
    */
   async monitorAsync<T>(
-    typeSymbol: TypeSymbol<T>,
+    _typeSymbol: TypeSymbol<T>,
     action: AsyncAction<T>,
   ): Promise<T> {
     try {
-      // Check for circular dependency
-      if (this.hasInStack(typeSymbol)) {
-        this.add(typeSymbol);
-        throw TypeWireError.circularDependency();
-      }
-
-      // Add to resolution stack
-      this.add(typeSymbol);
-
-      // Execute the resolution action
       return await action();
     } catch (err: unknown) {
-      if (err instanceof TypeWireError) {
-        err.requestId = this.requestId;
-        if (!err.message) {
-          err.message = getErrorMessage({
-            reason: err.reason,
-            stack: this.resolutionStack,
-            numberOfPathsToPrint: this.numberOfPathsToPrint,
-          });
-        }
-      }
-
+      this.tag(err);
       throw err;
-    } finally {
-      this.remove(typeSymbol);
     }
   }
 }
@@ -1147,6 +1083,106 @@ Resolution Path: ${formattedPaths.join(connector)}
 }
 
 /**
+ * A creation in progress: one link of a resolution chain.
+ *
+ * Each creation the container starts gets its own frame, and its creator
+ * receives a context bound to that frame. A chain is therefore the list of
+ * frames from a context up through its parents, so concurrent branches of one
+ * request (a creator resolving several imports at once) never see each other's
+ * links, as they would with one stack shared by the whole request.
+ */
+interface ResolutionFrame {
+  /** The type being created. */
+  readonly type: AnyTypeSymbol;
+
+  /** The unsettled frame whose creator started this creation, if any. */
+  readonly parent: ResolutionFrame | undefined;
+
+  /**
+   * True once the creation has returned a value or its promise has settled.
+   * A context whose frame has settled (a creator kept its context and
+   * resolves through it later) resolves as part of the nearest unsettled
+   * ancestor's chain, or as a fresh request when there is none.
+   */
+  settled: boolean;
+
+  /**
+   * What this creation waits on, with a count per frame: the nested
+   * creations it started and the in-flight creations of other requests it
+   * awaits. These edges make up the wait-for graph that detects a cycle
+   * running through another request's in-flight creation.
+   */
+  readonly waitsOn: Map<ResolutionFrame, number>;
+}
+
+/**
+ * An in-flight creation of a singleton.
+ */
+interface RunningResolution<T> {
+  /** Settles with the created value; the value is cached first if this entry is still current. */
+  readonly promise: Promise<T>;
+
+  /** The frame of the creation. */
+  readonly frame: ResolutionFrame;
+}
+
+/**
+ * Returns the unsettled frames of a chain, outermost first.
+ */
+function activeChain(frame: ResolutionFrame | undefined): ResolutionFrame[] {
+  const chain: ResolutionFrame[] = [];
+  for (let current = frame; current; current = current.parent) {
+    if (!current.settled) {
+      chain.push(current);
+    }
+  }
+  return chain.reverse();
+}
+
+function addWait(from: ResolutionFrame, to: ResolutionFrame) {
+  from.waitsOn.set(to, (from.waitsOn.get(to) ?? 0) + 1);
+}
+
+function removeWait(from: ResolutionFrame, to: ResolutionFrame) {
+  const count = (from.waitsOn.get(to) ?? 0) - 1;
+  if (count > 0) {
+    from.waitsOn.set(to, count);
+  } else {
+    from.waitsOn.delete(to);
+  }
+}
+
+/**
+ * Follows the wait-for graph from `start` and returns a path of frames that
+ * ends in one of `targets`, or undefined if none is reachable.
+ */
+function findWaitPath(
+  start: ResolutionFrame,
+  targets: ReadonlySet<ResolutionFrame>,
+): ResolutionFrame[] | undefined {
+  const visited = new Set<ResolutionFrame>();
+  const visit = (frame: ResolutionFrame): ResolutionFrame[] | undefined => {
+    if (targets.has(frame)) {
+      return [frame];
+    }
+    if (frame.settled || visited.has(frame)) {
+      return undefined;
+    }
+
+    visited.add(frame);
+    for (const next of frame.waitsOn.keys()) {
+      const path = visit(next);
+      if (path) {
+        return [frame, ...path];
+      }
+    }
+    return undefined;
+  };
+
+  return visit(start);
+}
+
+/**
  * ResolutionState wraps internal state shared between ResolutionContext for handling followings:
  *
  * 1. All of TypeWire bindings indexed by symbol
@@ -1178,7 +1214,8 @@ class ResolutionState {
    * This map tracks ongoing async resolutions to prevent duplicate resolution
    * attempts for the same type while a resolution is in progress.
    */
-  private readonly resolutions: Map<symbol, Promise<unknown>> = new Map();
+  private readonly resolutions: Map<symbol, RunningResolution<unknown>> =
+    new Map();
 
   /**
    * Gets the provider definition for a type symbol.
@@ -1225,6 +1262,8 @@ class ResolutionState {
   /**
    * Removes a binding and its associated singleton instance and resolution.
    * This method is used to clean up resources when a binding is no longer needed.
+   * A creation still in flight keeps running for the callers already waiting
+   * on it, but its value is not cached (see `registerResolution`).
    * @param typeSymbol The type symbol to unbind
    */
   async unbind(typeSymbol: AnyTypeSymbol): Promise<void> {
@@ -1254,39 +1293,56 @@ class ResolutionState {
   }
 
   /**
-   * Gets the in-progress resolution promise for a type symbol.
+   * Gets the in-flight creation for a type symbol.
    * @template T The type of the instance being resolved
    * @param typeSymbol The type symbol to get the resolution for
-   * @returns The resolution promise if one exists, undefined otherwise
+   * @returns The running resolution if one exists, undefined otherwise
    */
-  getRunningResolver<T>(typeSymbol: TypeSymbol<T>): Promise<T> | undefined {
-    return this.resolutions.get(typeSymbol.symbol) as Promise<T> | undefined;
+  getRunningResolution<T>(
+    typeSymbol: TypeSymbol<T>,
+  ): RunningResolution<T> | undefined {
+    return this.resolutions.get(typeSymbol.symbol) as
+      | RunningResolution<T>
+      | undefined;
   }
 
   /**
-   * Registers a new resolution promise and sets up handlers to update the singleton cache.
-   * This method ensures that singleton instances are properly cached once resolved
-   * and that in-progress resolutions are tracked.
+   * Registers an in-flight creation and caches its value once it resolves.
+   *
+   * Only the current entry for the symbol may touch the cache: a creation
+   * that `unbind` outlived finds another entry (or none) when it settles, so
+   * it neither caches its value nor removes the newer entry. The value is
+   * cached only if none is cached yet, so the first value cached for a
+   * binding is the one every later caller gets.
    * @template T The type of the instance being resolved
    * @param typeSymbol The type symbol being resolved
    * @param created The promise that will resolve to the instance
-   * @returns The updated promise that includes caching logic
+   * @param frame The frame of the creation
+   * @returns The promise that settles once the value is cached
    */
   registerResolution<T>(
     typeSymbol: TypeSymbol<T>,
     created: Promise<T>,
+    frame: ResolutionFrame,
   ): Promise<T> {
-    const updated = created
+    const symbol = typeSymbol.symbol;
+    const isCurrent = () => this.resolutions.get(symbol) === running;
+    const promise = created
       .then((value) => {
-        this.singletons.set(typeSymbol.symbol, value);
+        if (isCurrent() && !this.singletons.has(symbol)) {
+          this.singletons.set(symbol, value);
+        }
         return value;
       })
       .finally(() => {
-        this.resolutions.delete(typeSymbol.symbol);
+        if (isCurrent()) {
+          this.resolutions.delete(symbol);
+        }
       });
 
-    this.resolutions.set(typeSymbol.symbol, updated);
-    return updated;
+    const running: RunningResolution<T> = { promise, frame };
+    this.resolutions.set(symbol, running);
+    return promise;
   }
 
   /**
@@ -1302,15 +1358,14 @@ class ResolutionState {
 }
 
 /**
- * Provides an isolated resolution context for a single dependency resolution chain.
+ * Provides a resolution context for one link of a resolution chain.
  *
- * Each resolution operation (get/getSync) in the container creates a fresh instance
- * of this context with its own dedicated monitor. This ensures that concurrent
- * resolutions don't interfere with each other's dependency tracking, preventing
- * false-positive circular dependency detection.
- *
- * This is the core implementation of the per-request isolation pattern that enables
- * reliable parallel resolution of dependencies.
+ * Each resolution operation (get/getSync) in the container starts with a fresh
+ * root instance of this context, with its own monitor. Each creation the
+ * context starts gets its own {@link ResolutionFrame}, and the creator receives
+ * a child context bound to that frame. Circular dependencies are detected from
+ * the frame chain, so concurrent branches of one request (a creator resolving
+ * several imports at once) never mistake each other for a cycle.
  */
 class ScopedResolutionContext implements ResolutionContext {
   constructor(
@@ -1320,10 +1375,21 @@ class ScopedResolutionContext implements ResolutionContext {
     private readonly resolutionState: ResolutionState,
 
     /**
-     * Dependency tracker for detecting circular dependencies.
-     * Each instance has its own dedicated monitor.
+     * The monitor of the request this context serves. It is shared by every
+     * context of the request.
      */
     private readonly resolutionRequestMonitor: ResolutionRequestMonitor,
+
+    /**
+     * Optional limit on how many path items to display in error messages.
+     */
+    private readonly numberOfPathsToPrint?: number,
+
+    /**
+     * The creation whose creator received this context; undefined for the
+     * root context of a request.
+     */
+    private readonly frame?: ResolutionFrame,
   ) {}
 
   /**
@@ -1335,40 +1401,53 @@ class ScopedResolutionContext implements ResolutionContext {
    * @throws Error if the dependency is not found or if a circular dependency is detected
    */
   async get<T>(typeSymbol: TypeSymbol<T>): Promise<T> {
+    const chain = activeChain(this.frame);
     return this.resolutionRequestMonitor.monitorAsync(typeSymbol, async () => {
-      const binding = this.resolutionState.getBinding(typeSymbol);
-      const creator = binding.creator;
-      const scope = binding.scope ?? ScopeSingleton;
+      try {
+        this.checkChain(chain, typeSymbol);
+        const binding = this.resolutionState.getBinding(typeSymbol);
+        const creator = binding.creator;
+        const scope = binding.scope ?? ScopeSingleton;
 
-      if (scope === ScopeSingleton) {
-        if (this.resolutionState.hasSingletonValue(typeSymbol)) {
-          return this.resolutionState.getSingletonValue(typeSymbol) as T;
+        if (scope === ScopeSingleton) {
+          if (this.resolutionState.hasSingletonValue(typeSymbol)) {
+            return this.resolutionState.getSingletonValue(typeSymbol) as T;
+          }
+
+          const running = this.resolutionState.getRunningResolution(typeSymbol);
+          if (running) {
+            return await this.awaitRunning(chain, running);
+          }
+
+          const frame = this.startFrame(chain, typeSymbol);
+          const created = this.runCreator(creator, frame);
+          if (!isPromise<T>(created)) {
+            this.resolutionState.registerSingleton(typeSymbol, created);
+            return created;
+          }
+
+          return await this.resolutionState.registerResolution(
+            typeSymbol,
+            created,
+            frame,
+          );
         }
 
-        const resolver = this.resolutionState.getRunningResolver(typeSymbol);
-        if (resolver) {
-          const result = await resolver;
-          return result as T;
-        }
-
-        let created = creator(this);
-        if (!isPromise(created)) {
-          this.resolutionState.registerSingleton(typeSymbol, created);
-          return created as T;
-        }
-
-        created = this.resolutionState.registerResolution(typeSymbol, created);
-        const result = await created;
-        return result as T;
+        const frame = this.startFrame(chain, typeSymbol);
+        return await this.runCreator(creator, frame);
+      } catch (err: unknown) {
+        throw this.describe(err, chain, typeSymbol);
       }
-
-      return (await creator(this)) as T;
     });
   }
 
   /**
    * Gets an instance of type T synchronously.
    * Only supports synchronous creators.
+   *
+   * A singleton whose creation is already in flight throws `AsyncOnlyBinding`
+   * without running its creator again; a later `get` (or a `getSync` after
+   * the creation settles) returns the value that creation produces.
    * @template T The type of instance to get
    * @param typeSymbol The type symbol identifying the dependency
    * @returns An instance of type T
@@ -1376,33 +1455,167 @@ class ScopedResolutionContext implements ResolutionContext {
    *         or if a circular dependency is detected
    */
   getSync<T>(typeSymbol: TypeSymbol<T>): T {
+    const chain = activeChain(this.frame);
     return this.resolutionRequestMonitor.monitor(typeSymbol, () => {
-      const binding = this.resolutionState.getBinding(typeSymbol);
-      const creator = binding.creator;
-      const scope = binding.scope ?? ScopeSingleton;
+      try {
+        this.checkChain(chain, typeSymbol);
+        const binding = this.resolutionState.getBinding(typeSymbol);
+        const creator = binding.creator;
+        const scope = binding.scope ?? ScopeSingleton;
 
-      if (scope === ScopeSingleton) {
-        if (this.resolutionState.hasSingletonValue(typeSymbol)) {
-          return this.resolutionState.getSingletonValue(typeSymbol) as T;
+        if (scope === ScopeSingleton) {
+          if (this.resolutionState.hasSingletonValue(typeSymbol)) {
+            return this.resolutionState.getSingletonValue(typeSymbol) as T;
+          }
+
+          if (this.resolutionState.getRunningResolution(typeSymbol)) {
+            throw TypeWireError.asyncBindingOnly();
+          }
+
+          const frame = this.startFrame(chain, typeSymbol);
+          const result = this.runCreator(creator, frame);
+          if (isPromise<T>(result)) {
+            // Nobody awaits this promise here; a later `get` picks it up. Its
+            // rejection reaches that caller, so it is not reported as unhandled.
+            this.resolutionState
+              .registerResolution(typeSymbol, result, frame)
+              .catch(() => undefined);
+            throw TypeWireError.asyncBindingOnly();
+          }
+
+          this.resolutionState.registerSingleton(typeSymbol, result);
+          return result;
         }
 
-        const result = creator(this);
+        const frame = this.startFrame(chain, typeSymbol);
+        const result = this.runCreator(creator, frame);
         if (isPromise(result)) {
-          this.resolutionState.registerResolution(typeSymbol, result);
           throw TypeWireError.asyncBindingOnly();
         }
 
-        this.resolutionState.registerSingleton(typeSymbol, result);
-        return result as T;
+        return result;
+      } catch (err: unknown) {
+        throw this.describe(err, chain, typeSymbol);
       }
-
-      const result = creator(this);
-      if (isPromise(result)) {
-        throw TypeWireError.asyncBindingOnly();
-      }
-
-      return result as T;
     });
+  }
+
+  /**
+   * Throws `CircularDependency` if the type is already being created in this chain.
+   */
+  private checkChain(chain: ResolutionFrame[], typeSymbol: AnyTypeSymbol) {
+    if (chain.some((frame) => frame.type.symbol === typeSymbol.symbol)) {
+      throw TypeWireError.circularDependency();
+    }
+  }
+
+  /**
+   * Awaits another request's in-flight creation, unless that creation waits,
+   * directly or through further waits, on a creation in this chain. Awaiting
+   * it then would never settle, so this throws `CircularDependency` instead.
+   */
+  private async awaitRunning<T>(
+    chain: ResolutionFrame[],
+    running: RunningResolution<T>,
+  ): Promise<T> {
+    const waiter = chain[chain.length - 1];
+    if (!waiter) {
+      return running.promise;
+    }
+
+    const cycle = findWaitPath(running.frame, new Set(chain));
+    if (cycle) {
+      throw TypeWireError.circularDependency(
+        getErrorMessage({
+          reason: ReasonCircularDependency,
+          stack: [...chain, ...cycle].map((frame) => frame.type),
+          numberOfPathsToPrint: this.numberOfPathsToPrint,
+        }),
+      );
+    }
+
+    addWait(waiter, running.frame);
+    try {
+      return await running.promise;
+    } finally {
+      removeWait(waiter, running.frame);
+    }
+  }
+
+  /**
+   * Starts a frame for a creation made by the innermost unsettled creation of the chain.
+   */
+  private startFrame(
+    chain: ResolutionFrame[],
+    typeSymbol: AnyTypeSymbol,
+  ): ResolutionFrame {
+    const parent = chain[chain.length - 1];
+    const frame: ResolutionFrame = {
+      type: typeSymbol,
+      parent,
+      settled: false,
+      waitsOn: new Map(),
+    };
+    if (parent) {
+      addWait(parent, frame);
+    }
+    return frame;
+  }
+
+  /**
+   * Runs a creator with a context bound to its frame, and settles the frame
+   * once the creator returns a value or its promise settles.
+   */
+  private runCreator<T>(
+    creator: Creator<T>,
+    frame: ResolutionFrame,
+  ): T | Promise<T> {
+    const settle = () => {
+      frame.settled = true;
+      if (frame.parent) {
+        removeWait(frame.parent, frame);
+      }
+    };
+
+    let result: T | Promise<T>;
+    try {
+      result = creator(
+        new ScopedResolutionContext(
+          this.resolutionState,
+          this.resolutionRequestMonitor,
+          this.numberOfPathsToPrint,
+          frame,
+        ),
+      );
+    } catch (err) {
+      settle();
+      throw err;
+    }
+
+    if (isPromise<T>(result)) {
+      result.then(settle, settle);
+    } else {
+      settle();
+    }
+    return result;
+  }
+
+  /**
+   * Gives a TypeWireError without a message one that names the failed type and its resolution path.
+   */
+  private describe(
+    err: unknown,
+    chain: ResolutionFrame[],
+    typeSymbol: AnyTypeSymbol,
+  ): unknown {
+    if (err instanceof TypeWireError && !err.message) {
+      err.message = getErrorMessage({
+        reason: err.reason,
+        stack: [...chain.map((frame) => frame.type), typeSymbol],
+        numberOfPathsToPrint: this.numberOfPathsToPrint,
+      });
+    }
+    return err;
   }
 }
 
@@ -1410,13 +1623,17 @@ class ScopedResolutionContext implements ResolutionContext {
  * The main container that manages dependencies.
  * Implements both ResolutionContext and BindingContext interfaces.
  *
- * This container uses a per-request isolation pattern for dependency resolution:
+ * Resolution and circular dependency detection:
  * - Each call to get() or getSync() creates a fresh resolution context with its own monitor
- * - Each context has an isolated tracking state, preventing interference between concurrent requests
- * - This approach allows reliable parallel resolution of dependencies without false positives
- *
- * This design ensures that multiple concurrent resolutions (even of the same dependency)
- * will work correctly without being mistakenly identified as circular dependencies.
+ * - Each creation gets its own link in a resolution chain, and its creator receives a
+ *   context bound to that link, so concurrent branches (several imports resolved at
+ *   once) keep separate chains and are never mistaken for a cycle
+ * - Resolving a type already being created in the same chain throws `CircularDependency`
+ * - Concurrent first resolves of a singleton share one creation; awaiting another
+ *   request's in-flight creation that waits, directly or through further waits, on the
+ *   caller's own chain throws `CircularDependency` instead of never settling
+ * - `getSync` on a singleton whose creation is in flight throws `AsyncOnlyBinding`
+ *   without running the creator again
  */
 export class TypeWireContainer implements ResolutionContext, BindingContext {
   /**
@@ -1491,7 +1708,9 @@ export class TypeWireContainer implements ResolutionContext, BindingContext {
 
   /**
    * Removes a binding from the container.
-   * Also removes any singleton instances of the binding.
+   * Also removes any singleton instances of the binding. A creation still in
+   * flight settles for the callers already waiting on it, but its value is
+   * never cached, so a resolve after re-binding starts a new creation.
    * @param typeSymbol The type symbol identifying the binding to remove
    */
   async unbind(typeSymbol: AnyTypeSymbol): Promise<void> {
@@ -1499,9 +1718,8 @@ export class TypeWireContainer implements ResolutionContext, BindingContext {
   }
 
   /**
-   * Creates a fresh resolution context for a single resolution chain.
-   * Each call creates a new context with its own isolated monitor to prevent
-   * cross-talk between concurrent resolutions.
+   * Creates a fresh root resolution context for a single resolution request,
+   * with its own monitor.
    *
    * @returns A new ScopedResolutionContext with its own monitor
    * @private
@@ -1513,7 +1731,11 @@ export class TypeWireContainer implements ResolutionContext, BindingContext {
     } satisfies ResolutionRequest;
 
     const monitor = this.resolutionMonitorFactory(resoltionRequest);
-    return new ScopedResolutionContext(this.resolutionState, monitor);
+    return new ScopedResolutionContext(
+      this.resolutionState,
+      monitor,
+      this.numberOfPathsToPrint,
+    );
   }
 
   /**

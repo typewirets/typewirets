@@ -195,4 +195,27 @@ describe("Inversify Adapter", () => {
     const logger2 = await iLoggerWire.getInstance(inversifyAdapter);
     expect(logger2.isDebug).toBe(false);
   });
+  // Unlike TypeWireContainer, which keeps a cached value on re-apply (P6),
+  // the adapter rebinds through Inversify's unbind, which drops the instance.
+  test("re-applying a wire after resolve rebuilds the value", async () => {
+    let created = 0;
+    const counterWire = typeWireOf({
+      token: "Counter",
+      creator: () => ({ id: ++created }),
+    });
+    await counterWire.apply(inversifyAdapter);
+    const first = await counterWire.getInstance(inversifyAdapter);
+
+    await counterWire.apply(inversifyAdapter);
+    const second = await counterWire.getInstance(inversifyAdapter);
+
+    expect(first.id).toBe(1);
+    expect(second.id).toBe(2);
+    expect(await counterWire.getInstance(inversifyAdapter)).toBe(second);
+  });
+
+  test("binding an unbound type registers it synchronously", () => {
+    void inversifyAdapter.bind(loggerWire);
+    expect(inversifyAdapter.isBound(loggerWire.type)).toBe(true);
+  });
 });

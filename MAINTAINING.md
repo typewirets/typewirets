@@ -78,3 +78,12 @@ When writing TSDoc or markdown documentation, keep in mind that AI coding assist
 - Include short `@example` blocks — they are heavily weighted by AI tools for suggesting usage
 - Document constraints and invariants explicitly (e.g., "this method throws if..." rather than implying it)
 - Keep type names descriptive — `TypeWireScope` is better than `Scope` for global discoverability
+
+## Releasing
+
+The publishable packages (`@typewirets/core`, `@typewirets/inversify`, `@typewirets/react`) are released together, with the same version.
+
+- **Release adapters with core.** Workspace siblings use `workspace:*`, which is published as an exact version, so each adapter pins the core version it was released with. If an app installs a different core version at the top level, its wires come from that core and the adapter's from another. When a release changes the `BindingContext`/`ResolutionContext` contract or what `apply`, `bind` or `unbind` do, update every adapter in the same release (today: `InversifyAdapter`, `ReactResolutionContext`) and say which core version it needs in its changelog.
+- **Update every package's `CHANGELOG.md`,** including the packages that only bump their core dependency.
+- **Note behaviour that differs between containers.** When `TypeWireContainer` and an adapter handle the same call differently (for example, re-applying a wire after its value was created), say so in the adapter's README and TSDoc and pin it with a test.
+- **Run the full CI checks locally** (`pnpm lint`, `pnpm build`, `node scripts/check-cjs-entry-points.mjs`, `pnpm check-types`, `pnpm test`) before tagging `vX.Y.Z`.
