@@ -1,5 +1,5 @@
 {
-  description = "typewirets falke";
+  description = "typewirets flake";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
@@ -22,7 +22,7 @@
 
         devShell = pkgs.mkShell {
           buildInputs = [
-            pkgs.nodejs_22
+            pkgs.nodejs_24
           ];
         };
       }

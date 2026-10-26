@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Node.js 22 or later is required.** `engines.node` is now `>=22`, because Node.js 20 reached end-of-life on 30 April 2026. CI tests Node.js 22, 24 and 26.
+
 ## 0.1.1
 
 - `InversifyAdapter.bind` now replaces an existing binding for the same type itself, because `@typewirets/core` 0.1.1's `apply` no longer unbinds before binding. Re-applying a wire still replaces its Inversify binding and discards Inversify's cached instance, as in 0.1.0.

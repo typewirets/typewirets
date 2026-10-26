@@ -50,7 +50,7 @@
   "homepage": "https://github.com/typewirets/typewirets#readme",
   "sideEffects": false,
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "devDependencies": {
     "@typewirets/typescript-config": "workspace:*",
