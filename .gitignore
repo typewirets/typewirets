@@ -65,3 +65,6 @@ file_descriptor_set.bin
 !crates/turborepo-vt100/tests/data
 
 /.direnv/
+
+# Release tarballs (scripts/release.mjs pack)
+dist-release/
