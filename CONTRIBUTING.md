@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Node.js** >= 20 (active LTS)
+- **Node.js** >= 22 (a supported LTS line)
 - **Corepack** enabled — this auto-installs the correct pnpm version:
   ```bash
   corepack enable

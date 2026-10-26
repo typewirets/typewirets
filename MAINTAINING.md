@@ -41,7 +41,7 @@ Framework packages should declare the framework as a **`peerDependency`** with a
 Every publishable package (`packages/core`, `packages/inversify`, `packages/react`) should include:
 
 - `"sideEffects": false` — enables tree-shaking in bundlers
-- `"engines": { "node": ">=20" }` — documents the minimum supported Node.js version (track active LTS releases)
+- `"engines": { "node": ">=22" }` — documents the minimum supported Node.js version (the oldest Node.js LTS line still in support; raise it when that line reaches end-of-life, and keep the CI matrix in `.github/workflows/ci.yml` on every supported LTS line)
 - `"exports"` with `types`, `import`, and `require` conditions — supports both ESM and CJS consumers
 - `"files"` array — limits what gets published to npm
 
