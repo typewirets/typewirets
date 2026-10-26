@@ -1,0 +1,198 @@
+name: Publish to npm
+
+# Stages every publishable package on npm through trusted publishing (OIDC),
+# waits until a maintainer approves each one on npm with 2FA, then creates the
+# v<version> tag and GitHub release. See "Releasing" in MAINTAINING.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: string
+        required: true
+        description: "Version to publish (e.g. 0.1.1, 0.2.0-rc.1)"
+      dry-run:
+        type: boolean
+        default: true
+        description: "Dry run (build and pack only, stage nothing)"
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+permissions: {}
+
+env:
+  VERSION: ${{ inputs.version }}
+
+jobs:
+  ci:
+    name: CI
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  stage:
+    name: Stage on npm
+    needs: [ci]
+    runs-on: ubuntu-latest
+    environment: ${{ inputs['dry-run'] == false && 'npm' || 'dry-run' }}
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      packages: ${{ steps.pack.outputs.packages }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Require main for a real publish
+        if: inputs['dry-run'] == false && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Publish from main, not $GITHUB_REF"
+          exit 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      # Trusted publishing needs npm >= 11.5.1 and staging needs >= 11.15.0;
+      # Node 22 ships npm 10.
+      - name: Install npm
+        run: |
+          npm install -g npm@11.21.1
+          npm --version
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check version, changelogs and npm; set package versions
+        run: node scripts/release.mjs prepare "$VERSION"
+
+      - name: Check tag doesn't already exist
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null; then
+            echo "::error::Tag v$VERSION already exists"
+            exit 1
+          fi
+
+      - name: Choose dist-tag
+        run: |
+          if [[ "$VERSION" == *-* ]]; then
+            echo "DIST_TAG=next" >> "$GITHUB_ENV"
+          else
+            echo "DIST_TAG=latest" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build
+        run: pnpm build
+
+      - name: Check CommonJS entry points
+        run: node scripts/check-cjs-entry-points.mjs
+
+      - name: Pack
+        id: pack
+        run: |
+          node scripts/release.mjs pack "$VERSION" dist-release
+          echo "packages=$(cut -d' ' -f1 dist-release/publish-order.txt | paste -sd' ')" >> "$GITHUB_OUTPUT"
+
+      # Without the OIDC variables npm skips the token exchange; a dry run
+      # needs no credentials.
+      - name: Stage (dry run)
+        if: inputs['dry-run'] == true
+        run: |
+          while read -r name tarball; do
+            env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
+              npm stage publish "$tarball" --dry-run --access public --tag "$DIST_TAG" < /dev/null
+          done < dist-release/publish-order.txt
+          echo "::notice::Dry run complete: packed v$VERSION successfully. Re-run with dry-run=false to stage it on npm."
+
+      - name: Stage
+        if: inputs['dry-run'] == false
+        run: |
+          {
+            echo "## v$VERSION is staged on npm"
+            echo
+            echo "Approve each package, @typewirets/core first, on npmjs.com (Staged Packages tab) or from a terminal:"
+            echo
+            echo '```sh'
+          } >> "$GITHUB_STEP_SUMMARY"
+          while read -r name tarball; do
+            npm stage publish "$tarball" --access public --tag "$DIST_TAG" --json < /dev/null > stage.json
+            cat stage.json
+            # Best effort: the package is already staged, so a stage id that
+            # can't be read must not fail the run.
+            stage_id=$(node -e '
+              try {
+                const out = JSON.parse(require("node:fs").readFileSync("stage.json", "utf8"));
+                process.stdout.write(Object.values(out)[0]?.stageId ?? out.stageId ?? "");
+              } catch {}
+            ')
+            if [ -n "$stage_id" ]; then
+              echo "npm stage approve $stage_id   # $name" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "npm stage list $name   # stage id not reported" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done < dist-release/publish-order.txt
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+  # npm can't notify this run when a package is approved, so this job polls
+  # the public registry. If it times out, approve on npm and use "Re-run failed
+  # jobs": that re-runs this job and the release, not the staging.
+  wait-for-approval:
+    name: Wait for approval on npm
+    needs: [stage]
+    if: inputs['dry-run'] == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    permissions: {}
+    env:
+      PACKAGES: ${{ needs.stage.outputs.packages }}
+    steps:
+      - name: Wait until every package is live
+        run: |
+          while true; do
+            pending=()
+            for name in $PACKAGES; do
+              if ! curl -sf -o /dev/null "https://registry.npmjs.org/${name/\//%2f}/$VERSION"; then
+                pending+=("$name")
+              fi
+            done
+            if [ ${#pending[@]} -eq 0 ]; then
+              break
+            fi
+            echo "$(date -u +%H:%M:%S) waiting for approval: ${pending[*]}"
+            sleep 60
+          done
+          echo "All packages are live at $VERSION"
+
+  release:
+    name: Tag and GitHub release
+    needs: [wait-for-approval]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Write release notes
+        run: node scripts/release.mjs notes "$VERSION" > release-notes.md
+
+      # Creates the tag on the commit this run built from, not on the current
+      # tip of main.
+      - name: Create tag and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          flags=()
+          if [[ "$VERSION" == *-* ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "v$VERSION" --target "$GITHUB_SHA" --title "v$VERSION" \
+            --notes-file release-notes.md "${flags[@]}"
