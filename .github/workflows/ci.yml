@@ -23,14 +23,18 @@ jobs:
       with:
         persist-credentials: false
 
-    # Node 25+ no longer bundles Corepack; this reads the pnpm version from packageManager.
-    - name: Setup pnpm
-      uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-
     - name: Setup Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: ${{ matrix.node-version }}
+
+    # Node 25+ no longer bundles Corepack, so install a pinned version from npm.
+    # Corepack then installs the pnpm version in packageManager and checks its sha512.
+    - name: Setup pnpm
+      run: |
+        npm install -g corepack@0.36.0
+        corepack enable
+        pnpm --version
 
     - name: Get pnpm store directory
       id: pnpm-cache
