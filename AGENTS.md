@@ -19,12 +19,13 @@ Anything else needs an explicit, documented exception: a maintainer's sign-off i
 
 Before adding an action, check its Marketplace listing yourself. Confirm the owner and repository name exactly, since look-alike names (`action/checkout`, `actions/check-out`) are a common trick and AI agents can produce plausible names for actions that do not exist.
 
-| Action | Publisher | Status | Why it is allowed |
+| Action | Publisher | Status | Exception reason |
 |---|---|---|---|
 | `actions/checkout` | GitHub | Verified creator | |
 | `actions/setup-node` | GitHub | Verified creator | |
 | `actions/cache` | GitHub | Verified creator | |
-| `pnpm/action-setup` | pnpm | **Not verified** (exception) | Official action from the pnpm project. Node 25+ no longer bundles Corepack, so CI needs another way to install pnpm. Pending maintainer review. |
+
+There are no exceptions today. pnpm is installed with a `run:` step (a pinned `corepack` from npm, which checks the `packageManager` hash) rather than the unverified `pnpm/action-setup`.
 
 ### GitHub Actions: pin to a full commit SHA
 
