@@ -176,6 +176,36 @@ function App({ container }) {
 }
 ```
 
+### When a resolution fails
+
+If an async TypeWire fails, `useTypeWire` throws the error to the nearest error boundary. The error is cached, so React's Suspense retries don't start the creation again and again. That cache belongs to `ResolutionContextProvider` and is cleared only when the provider re-renders or remounts. Resetting the error boundary alone, or calling `unbind` and re-applying the TypeWire, shows the same error again.
+
+To retry after replacing a binding, re-render the provider as well as resetting the boundary:
+
+```tsx
+function App({ container }) {
+  const [attempt, setAttempt] = useState(0);
+
+  async function retry() {
+    await container.unbind(UserStoreWire.type);
+    await UserStoreWire.apply(container);
+    setAttempt((n) => n + 1); // re-renders the provider, which clears cached errors
+  }
+
+  return (
+    <ResolutionContextProvider resolutionContext={container}>
+      <ErrorBoundary key={attempt} fallback={<button onClick={retry}>Retry</button>}>
+        <Suspense fallback={<div>Loading dashboard...</div>}>
+          <UserDashboard />
+        </Suspense>
+      </ErrorBoundary>
+    </ResolutionContextProvider>
+  );
+}
+```
+
+`ErrorBoundary` stands for any error boundary component. If you pass a `ReactResolutionContext` you created yourself, its cached errors last as long as that object.
+
 ## Core Components
 
 - **ResolutionContextProvider**: Provides TypeWire container to React components

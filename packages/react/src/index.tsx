@@ -33,6 +33,12 @@ import {
  * later `get` and `getSync` calls for the same `TypeSymbol` throw it without
  * calling the underlying context.
  *
+ * A cached error lasts as long as this object, even across `unbind` and a
+ * re-apply: this class only sees a `ResolutionContext`, so it cannot tell
+ * that the binding changed. {@link ResolutionContextProvider} creates a new
+ * one each time it renders (unless you pass it a `ReactResolutionContext`),
+ * so to retry after replacing a binding, re-render or remount the provider.
+ *
  * Calls that run while a resolution is in flight are not deduplicated here:
  * the underlying context does that (`TypeWireContainer` creates each singleton
  * once), and it never hands a creation started before `unbind` to new callers.
@@ -205,6 +211,11 @@ export function useTypeWire<T>(typeWire: TypeWire<T>): T {
  * If the given `resolutionContext` is not already a {@link ReactResolutionContext},
  * it is automatically wrapped in one to enable error caching, so a failed
  * resolution reaches an error boundary instead of retrying under Suspense.
+ *
+ * The wrapper is created anew on every render of this component, which clears
+ * cached errors. A failed resolution stays failed until this component
+ * re-renders or remounts, even after `unbind` and a re-apply. If you pass a
+ * `ReactResolutionContext` yourself, its errors last as long as that object.
  *
  * @param props.resolutionContext - The resolution context to provide to descendants
  * @param props.children - Child components that will have access to the context
