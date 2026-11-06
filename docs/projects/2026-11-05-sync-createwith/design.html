@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resolve createWith imports sync-first inside the core container, on top of #20's per-step chains</title>
+<style>
+/* Tokens: change values here only. Light first, dark redefines the same names. */
+:root{
+  --bg:#f4f5f7; --surface:#ffffff; --fg:#1a1f27; --muted:#5d6672; --line:#d6dae0;
+  --accent:#2f5fd0; --accent-soft:#e6ecfb;
+  --ok:#1d7a46; --warn:#9a6200; --bad:#b3261e;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+/* Dark: follows the OS unless the viewer picked light; data-theme="dark" forces it. */
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 var(--sans)}
+main{max-width:720px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:28px}
+h1{font-size:1.6rem;line-height:1.2;margin:0;text-wrap:balance}
+h2{font-size:1.15rem;margin:0 0 8px}
+p{margin:0 0 8px}
+.meta{font:13px/1.4 var(--mono);color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
+.takeaway{background:var(--accent-soft);border-left:4px solid var(--accent);padding:12px 14px;border-radius:0 6px 6px 0;font-weight:600}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.8rem;font-weight:600;border:1px solid currentColor}
+.chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)}
+figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px}
+figure svg{display:block;width:100%;height:auto}
+figcaption{font-size:.9rem;color:var(--muted);margin-top:8px}
+figcaption b{color:var(--fg)}
+details{margin-top:6px} summary{cursor:pointer}
+fieldset{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:0 0 12px}
+legend{font-weight:600;padding:0 4px}
+label{display:block;padding:4px 0}
+textarea{width:100%;min-height:4.5em;font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px}
+.answer pre{white-space:pre-wrap;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.45 var(--mono)}
+button{font:inherit;font-weight:600;padding:8px 14px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);cursor:pointer}
+button:focus-visible,summary:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Resolve createWith imports sync-first inside the core container, on top of #20's per-step chains</h1>
+    <div class="meta"><span>Key: sync-createwith</span><span>Date: <time datetime="2026-11-05">2026-11-05</time></span><span>Author: Claude Code (Opus 5.5)</span><span>Status: superseded 2026-11-06: async stays the contract (see README.md)</span><span>Serves: product.html B1–B8</span></div>
+  </header>
+
+  <p class="takeaway">Recommended: A1. The container tries each import synchronously, runs it only once, and finishes asynchronously from the first import that turns out async. It needs #20's per-step resolution chain first: on today's shared cycle-detection stack, mixing sync and async reads corrupts the stack (measured below).</p>
+
+  <section id="evidence">
+    <h2>What the spike showed</h2>
+    <p>Throwaway spike, Node 24, against core at 67f6cfb. "Naive" means: <code>createWith</code> reads each import with <code>getInstanceSync</code>, and falls back to <code>getInstance</code> on <code>AsyncOnlyBinding</code>.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Case</th><th>main today</th><th>Naive sync-first</th></tr></thead>
+      <tbody>
+        <tr id="E1"><td><b>E1.</b> Cycle A → B → C(async) → A, path printed</td><td><code>A -&gt; B -&gt; C -&gt; [A]</code> <span class="chip ok">right</span></td><td><code>A -&gt; B -&gt; B -&gt; [A]</code> <span class="chip bad">garbled</span></td></tr>
+        <tr id="E2"><td><b>E2.</b> Transient async import, one <code>get</code></td><td>created 1×</td><td>created 2× <span class="chip bad">duplicate</span></td></tr>
+        <tr id="E3"><td><b>E3.</b> Cycle B ↔ C under a createWith A</td><td>CircularDependency</td><td>CircularDependency <span class="chip ok">ok</span></td></tr>
+      </tbody>
+    </table></div>
+    <ul>
+      <li id="E0"><b>E0. Nothing is inferred up front.</b> Whether an import is async can't be known before it runs. A1 doesn't guess: it runs each import once and looks at the answer (a value or a promise), as the container already does for plain <code>creator</code> wires. At the first promise it keeps that promise and finishes the rest async. A second spike of this on current main: an all-sync tree read sync on first use, each wire created once; a tree with an async import threw retriable <code>AsyncOnlyBinding</code> on a sync read, then <code>getInstance</code> worked and the async import was created once; a transient async import was created once per <code>getInstance</code>.</li>
+      <li><b>Why E1:</b> <code>CircularDependencyMonitor.remove</code> pops the top of a stack shared by the whole request (index.ts:865). A sync frame that ends after an async child was pushed pops the child instead of itself. #20 (P3a in the triage plan) replaces this stack with a per-step chain.</li>
+      <li><b>Why E2:</b> <code>getSync</code> runs a transient creator, gets a promise, throws, and drops the promise; the fallback runs it again.</li>
+      <li><b>Inversify:</b> the adapter's <code>getSync</code> throws Inversify's own error for an async binding, not <code>AsyncOnlyBinding</code>, so a <code>getSync</code> probe can't tell "async" from "broken" there.</li>
+    </ul>
+  </section>
+
+  <section id="named">
+    <h2>Named approaches</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>From the task</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr id="M1"><td><b>M1.</b> Try imports with <code>getSync</code>, fall back to async</td><td><span class="chip warn">changed</span> Keep the idea, but not through public <code>getSync</code>: E1 and E2 above. Becomes A1/A2.</td></tr>
+        <tr id="M2"><td><b>M2.</b> Explicit opt-in</td><td><span class="chip warn">kept as A3</span> Safe and small, but leaves the default React symptom in place.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="approaches">
+    <h2>Approaches</h2>
+    <div class="scroll"><table>
+      <thead><tr><th></th><th>A1 (pick)</th><th>A2</th><th>A3</th></tr></thead>
+      <tbody>
+        <tr><td>What</td><td>Sync-first by default. An internal "value or pending" step in the core container runs each import once; sync all the way → <code>createWith</code> runs sync; first pending import → finish the rest async, in order, as today.</td><td>A1's behaviour now, on top of #28, plus a stop-gap in the default monitor (remove by identity, re-track a pending creation).</td><td>Opt-in flag, e.g. <code>typeWireOf({ sync: true, … })</code>: imports read with <code>getSync</code> only; <code>createWith</code> typed to return a value.</td></tr>
+        <tr><td>Covers</td><td>B1–B8</td><td>B1–B5, B7–B8; B6's path order can still come out wrong</td><td>B1–B3 only for opted-in wires</td></tr>
+        <tr><td>Effort</td><td>M, after #20's chain work</td><td>M</td><td>S</td></tr>
+        <tr><td>Risk</td><td>Low: the per-step chain makes sync/async mixing safe</td><td>Medium: custom monitors that pop the top still garble; mostly rewritten by #20</td><td>Low; but an opted-in wire with an async import fails even through <code>getInstance</code></td></tr>
+        <tr><td>Ships</td><td>0.2.0, stacked on the #20 PR</td><td>0.2.0, before #20</td><td>Any time after #28</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="recommendation">
+    <h2>Recommendation</h2>
+    <p id="R1"><b>R1.</b> A1. It is the only option that gives the default React fix (V0) without weakening cycle errors (V3, B6), and the chain rework it needs is already planned for 0.2.0. A2 does the same work twice; A3 leaves #21's React symptom for everyone who doesn't opt in.</p>
+  </section>
+
+  <section id="bounds">
+    <h2>Bounds, latitude and my calls</h2>
+    <ul>
+      <li id="N1"><b>N1.</b> No new public API. The "value or pending" step stays inside the core container.</li>
+      <li id="N2"><b>N2.</b> Imports still resolve one at a time in declared order; no concurrency is added here.</li>
+      <li id="C1"><b>C1.</b> My call: contexts other than <code>TypeWireContainer</code> (Inversify adapter, custom <code>ResolutionContext</code>s) keep today's async path, because they can't say "this is async" without running it twice (E2, Inversify note). React gets the fix, because the container, not <code>ReactResolutionContext</code>, calls creators.</li>
+      <li id="C2"><b>C2.</b> My call: ship in 0.2.0 with #20; changelog entries in core and react.</li>
+      <li id="L1"><b>L1.</b> Builder decides alone: internal names, how the pending step hands off to async, test file layout. Checks first: anything that changes a public type or the monitor API beyond what #20 already changes.</li>
+    </ul>
+  </section>
+
+  <section id="risks">
+    <h2>Risks</h2>
+    <ul>
+      <li id="K1"><b>K1.</b> #20's chain design may land differently from the triage plan. A1 only needs "each step knows its own chain"; adapt to whatever lands. No A1 code before the #20 PR is up.</li>
+      <li id="K2"><b>K2.</b> <code>withCreator</code> decorators that call <code>.then</code> on the wrapped creator's result break for sync wires. Covered by the changelog (B8); <code>Creator</code> is already typed <code>T | Promise&lt;T&gt;</code>.</li>
+      <li id="K3"><b>K3.</b> Not now: <code>useTypeWire</code> tests <code>if (value)</code>, so a wire whose value is falsy still suspends. Separate small fix.</li>
+    </ul>
+  </section>
+
+  <section id="tests">
+    <h2>Test plan</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Test</th><th>Proves</th><th>On main</th></tr></thead>
+      <tbody>
+        <tr id="T1"><td><b>T1.</b> Fresh container: <code>getInstanceSync</code> on a sync <code>createWith</code> wire importing a nested <code>createWith</code> wire and a sync creator returns the value; each created once; later <code>getInstance</code> returns the same instance.</td><td>B1, B2</td><td>fails</td></tr>
+        <tr id="T2"><td><b>T2.</b> React: <code>useTypeWire</code> of that wire inside <code>&lt;Suspense fallback&gt;</code> never renders the fallback; one creation, also under <code>StrictMode</code>.</td><td>B3</td><td>fails</td></tr>
+        <tr id="T3"><td><b>T3.</b> Async import anywhere in the tree: sync read throws retriable <code>AsyncOnlyBinding</code>, <code>getInstance</code> works, then sync read returns the cached value.</td><td>B4</td><td>passes (guard)</td></tr>
+        <tr id="T4"><td><b>T4.</b> Transient async import created once per <code>getInstance</code>.</td><td>B5</td><td>passes (guard; fails on naive)</td></tr>
+        <tr id="T5"><td><b>T5.</b> Cycle through <code>createWith</code> wires with sync and async legs: <code>CircularDependency</code>, path <code>A -&gt; B -&gt; C -&gt; [A]</code>, via both reads.</td><td>B6</td><td>passes (guard; fails on naive)</td></tr>
+        <tr id="T6"><td><b>T6.</b> Sync <code>createWith</code> that throws: <code>getInstanceSync</code> throws that error.</td><td>B7</td><td>fails</td></tr>
+      </tbody>
+    </table></div>
+    <p>One command, as in CI: <code>pnpm build &amp;&amp; pnpm test</code>.</p>
+  </section>
+
+  <section id="open">
+    <h2>Open</h2>
+    <ul>
+      <li id="Q1"><b>Q1.</b> Approach: A1, A2 or A3?</li>
+      <li id="Q2"><b>Q2.</b> If A1: who builds #20's chain rework first?</li>
+    </ul>
+  </section>
+
+  <section id="answer" class="answer">
+    <h2>Your answer</h2>
+    <form id="answer-form">
+      <fieldset>
+        <legend>Q0. Product brief (product.html, B1–B8)</legend>
+        <label><input type="radio" name="Q0" value="approved" checked> Approved</label>
+        <label><input type="radio" name="Q0" value="changes needed (see notes)"> Changes needed (say what in the notes)</label>
+      </fieldset>
+      <fieldset>
+        <legend>Q1. Approach</legend>
+        <label><input type="radio" name="Q1" value="A1 — sync-first by default, stacked on #20's per-step chains, 0.2.0" checked> A1 (recommended): sync-first by default, on #20's chains</label>
+        <label><input type="radio" name="Q1" value="A2 — sync-first now on #28, with a monitor stop-gap"> A2: sync-first now, monitor stop-gap</label>
+        <label><input type="radio" name="Q1" value="A3 — explicit opt-in flag only"> A3: explicit opt-in</label>
+      </fieldset>
+      <fieldset>
+        <legend>Q2. If A1: who builds #20's chain rework first?</legend>
+        <label><input type="radio" name="Q2" value="this session: #20 chain rework as its own PR, then this PR stacked on it" checked> This session (recommended): #20 as its own PR, this stacked on it</label>
+        <label><input type="radio" name="Q2" value="another session builds #20; this one waits for its PR"> Another session builds #20; this waits</label>
+      </fieldset>
+      <label for="notes">Anything else?</label>
+      <textarea id="notes" name="notes" placeholder="Optional"></textarea>
+    </form>
+    <p>Copy this and paste it back into the chat:</p>
+    <pre id="answer-text"></pre>
+    <button type="button" id="copy">Copy answer</button>
+  </section>
+
+  <footer>Composed 2026-11-05 by Claude Code (Opus 5.5) using html-for-humans and outcome-brief, from packages/core/src/index.ts, packages/react/src/index.tsx and packages/inversify/src/index.ts at 67f6cfb, PR #28's diff, issue #20, the triage plan in PR #30, and a throwaway Node 24 spike (E1–E3).</footer>
+</main>
+<script>
+(function(){
+  var form=document.getElementById('answer-form'); if(!form) return;
+  var out=document.getElementById('answer-text'), btn=document.getElementById('copy');
+  var title=document.querySelector('h1').textContent.trim();
+  function build(){
+    var lines=['Answer to: '+title];
+    form.querySelectorAll('fieldset').forEach(function(fs){
+      var picked=fs.querySelector('input:checked');
+      lines.push(fs.querySelector('legend').textContent.trim()+' → '+(picked?picked.value:'(no answer)'));
+    });
+    var notes=form.querySelector('textarea').value.trim();
+    if(notes) lines.push('Notes: '+notes);
+    out.textContent=lines.join('\n');
+  }
+  form.addEventListener('input',build); build();
+  btn.addEventListener('click',function(){
+    var done=function(){btn.textContent='Copied';setTimeout(function(){btn.textContent='Copy answer'},1500)};
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(out.textContent).then(done,function(){selectText()});
+    } else selectText();
+  });
+  function selectText(){var r=document.createRange();r.selectNodeContents(out);var s=getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='Selected, copy it'}
+})();
+</script>
+</body>
+</html>

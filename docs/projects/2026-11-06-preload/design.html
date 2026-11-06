@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add container.preload({ wires }) and usePreload({ wires }), let useTypeWire opt out of suspending, fix its falsy check, and ship with #20 in 0.2.0</title>
+<style>
+/* Tokens: change values here only. Light first, dark redefines the same names. */
+:root{
+  --bg:#f4f5f7; --surface:#ffffff; --fg:#1a1f27; --muted:#5d6672; --line:#d6dae0;
+  --accent:#2f5fd0; --accent-soft:#e6ecfb;
+  --ok:#1d7a46; --warn:#9a6200; --bad:#b3261e;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+/* Dark: follows the OS unless the viewer picked light; data-theme="dark" forces it. */
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 var(--sans)}
+main{max-width:720px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:28px}
+h1{font-size:1.6rem;line-height:1.2;margin:0;text-wrap:balance}
+h2{font-size:1.15rem;margin:0 0 8px}
+h3{font-size:1rem;margin:14px 0 4px}
+p{margin:0 0 8px}
+.meta{font:13px/1.4 var(--mono);color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
+.takeaway{background:var(--accent-soft);border-left:4px solid var(--accent);padding:12px 14px;border-radius:0 6px 6px 0;font-weight:600}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.8rem;font-weight:600;border:1px solid currentColor}
+.chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)}
+figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px}
+figure svg{display:block;width:100%;height:auto}
+figcaption{font-size:.9rem;color:var(--muted);margin-top:8px}
+figcaption b{color:var(--fg)}
+details{margin-top:6px} summary{cursor:pointer}
+fieldset{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:0 0 12px}
+legend{font-weight:600;padding:0 4px}
+label{display:block;padding:4px 0}
+textarea{width:100%;min-height:4.5em;font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px}
+.answer pre{white-space:pre-wrap;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.45 var(--mono)}
+button{font:inherit;font-weight:600;padding:8px 14px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);cursor:pointer}
+button:focus-visible,summary:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Add container.preload({ wires }) and usePreload({ wires }), let useTypeWire opt out of suspending, fix its falsy check, and ship with #20 in 0.2.0</h1>
+    <div class="meta"><span>Key: preload</span><span>Date: <time datetime="2026-11-06">2026-11-06</time></span><span>Author: Claude Code (Opus 5.5)</span><span>Status: picked 2026-11-06 (Q1, Q2; Q3 open)</span><span>Serves: product.html B1–B11</span><span>Source: core and react at a9dc4ac</span></div>
+  </header>
+
+  <p class="takeaway">Picked: one new core method (<code>container.preload(opts?)</code>: every bound singleton, or only <code>opts.wires</code> and their imports, in parallel), one new React hook (<code>usePreload({ wires })</code>, suspends a subtree once), an opt-in <code>useTypeWire(wire, { suspend: false })</code> that throws instead of suspending, a fix so <code>useTypeWire</code> returns falsy values, and docs. B11 needs #20's fix; 0.2.0 ships only with both.</p>
+
+  <section id="decisions">
+    <h2>Decisions (2026-11-06)</h2>
+    <ul>
+      <li id="D1"><b>D1.</b> The argument goes on <code>preload</code>, not the container constructor: the constructor runs before anything is bound, can't be awaited, and can't cover later phases (routes, features). Not a flag on the wire either: which phase loads a wire is the app's call, and wires are reused across apps and tests.</li>
+      <li id="D2"><b>D2.</b> Public methods take an options object with named fields (the maintainer's convention, as in <code>typeWireOf({ … })</code> and <code>new TypeWireContainer(opts?)</code>): <code>preload({ wires })</code>, <code>usePreload({ wires })</code>, <code>useTypeWire(wire, { suspend })</code>. New options become new fields, not breaking changes.</li>
+      <li id="D3"><b>D3.</b> Add <code>useTypeWire(wire, { suspend: false })</code>: an unpreloaded wire throws a clear error naming the wire instead of suspending, so a forgotten preload is caught in development. Default unchanged (B8).</li>
+      <li id="D4"><b>D4.</b> Q3 (merge order with #20) not answered. It doesn't block building: 0.2.0 ships only with both.</li>
+    </ul>
+  </section>
+
+  <section id="facts">
+    <h2>What exists today</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Fact (a9dc4ac)</th><th>Matters for</th></tr></thead>
+      <tbody>
+        <tr id="F1"><td><b>F1.</b> <code>group.getAllInstances(ctx)</code> resolves a group in parallel, imports included; its TSDoc already recommends it for preloading.</td><td>B1: no new API needed</td></tr>
+        <tr id="F2"><td><b>F2.</b> <code>container.getAllAsync()</code> resolves every binding one at a time, transients included, and returns a <code>Map</code>. No test or doc uses it.</td><td>B2: not fit as is</td></tr>
+        <tr id="F3"><td><b>F3.</b> <code>useTypeWire</code> ends with <code>if (value) return value; throw promise;</code>.</td><td>B6: falsy values suspend</td></tr>
+        <tr id="F4"><td><b>F4.</b> <code>ReactResolutionContext</code> caches errors per symbol until <code>clearErrors</code> (#31).</td><td>B3/B7: a failed preload rethrows, not re-suspends</td></tr>
+        <tr id="F5"><td><b>F5.</b> The react package's peer range is React 16.8+, but the provider renders <code>&lt;ContainerContext value&gt;</code>, which only React 19 supports.</td><td>Hook must use the throw-a-promise pattern, like <code>useTypeWire</code>; F5 itself is out of scope</td></tr>
+        <tr id="F6"><td><b>F6.</b> Concurrent top-level resolves of a real cycle hang (issue #20, bug 2).</td><td>B11</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="shape">
+    <h2>Shape</h2>
+    <figure>
+      <svg viewBox="0 0 400 150" role="img" aria-labelledby="shapecap">
+        <g font-size="11" fill="var(--fg)" text-anchor="middle">
+          <rect x="4" y="10" width="120" height="40" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <text x="64" y="27">container.preload()</text><text x="64" y="42" fill="var(--muted)">every singleton (new)</text>
+          <rect x="4" y="60" width="120" height="40" rx="6" fill="var(--surface)" stroke="var(--line)"/>
+          <text x="64" y="77">group.getAllInstances</text><text x="64" y="92" fill="var(--muted)">named set (exists)</text>
+          <rect x="4" y="110" width="120" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <text x="64" y="125">usePreload(set)</text><text x="64" y="138" fill="var(--muted)">subtree (new)</text>
+          <rect x="160" y="45" width="100" height="56" rx="6" fill="var(--surface)" stroke="var(--fg)"/>
+          <text x="210" y="68">container</text><text x="210" y="84" fill="var(--muted)">singleton cache</text>
+          <rect x="294" y="45" width="102" height="56" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <text x="345" y="68">useTypeWire</text><text x="345" y="84" fill="var(--muted)">reads sync (fixed)</text>
+        </g>
+        <g stroke="var(--muted)" fill="none"><path d="M124 30 L160 60"/><path d="M124 80 L160 73"/><path d="M124 127 L160 90"/><path d="M260 73 L294 73"/></g>
+      </svg>
+      <figcaption id="shapecap"><b>Three ways in fill one cache; components read it synchronously.</b>
+        <details><summary>Data</summary>container.preload() (new): every bound singleton. group.getAllInstances (exists): a named set. usePreload (new): a named set, suspending one subtree. All three fill the container's singleton cache; useTypeWire (fixed for falsy values) reads it with getInstanceSync and only suspends for a wire nobody preloaded.</details>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="approaches">
+    <h2>Approaches, per decision</h2>
+    <h3>Whole-container preload (B2)</h3>
+    <div class="scroll"><table>
+      <thead><tr><th>ID</th><th>What</th><th>Effort</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr id="A1"><td><b>A1.</b> New <code>container.preload(opts?: { wires? }): Promise&lt;void&gt;</code></td><td>Without <code>wires</code>: every singleton bound at call time. With <code>wires</code>: those wires and their imports. In parallel, each as its own resolution request. Skips transients. <code>getAllAsync</code> stays, marked <code>@deprecated</code> in favour of it.</td><td>S</td><td><span class="chip ok">picked</span></td></tr>
+        <tr id="A2"><td><b>A2.</b> Change <code>getAllAsync</code> to skip transients</td><td>Its returned <code>Map</code> loses entries: a quiet breaking change to an existing method.</td><td>S</td><td><span class="chip bad">rejected</span></td></tr>
+        <tr id="A3"><td><b>A3.</b> Docs only: "put your top wires in one group"</td><td>No new API, but a wire not reachable from the group is missed, so B2 isn't met.</td><td>XS</td><td><span class="chip warn">falls short</span></td></tr>
+      </tbody>
+    </table></div>
+    <h3>Preload inside the React tree (B7)</h3>
+    <div class="scroll"><table>
+      <thead><tr><th>ID</th><th>What</th><th>Effort</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr id="H1"><td><b>H1.</b> Hook <code>usePreload({ wires })</code></td><td>Suspends the calling component until every singleton in the set is created, then returns. Throws a cached error to the error boundary. Works on React 16.8+ like <code>useTypeWire</code>.</td><td>S</td><td><span class="chip ok">picked</span></td></tr>
+        <tr id="H2"><td><b>H2.</b> H1 plus a <code>&lt;Preload wires fallback&gt;</code> component</td><td>Wraps a Suspense boundary and H1. Convenient, but more API to keep; easy to add later.</td><td>S+</td><td><span class="chip warn">later</span></td></tr>
+        <tr id="H3"><td><b>H3.</b> Docs only: route loaders</td><td>Works with routers that have loaders; nothing for a panel or a router without them. B7 not met in-tree.</td><td>XS</td><td><span class="chip warn">falls short</span></td></tr>
+      </tbody>
+    </table></div>
+    <h3>Order with #20 (B11)</h3>
+    <div class="scroll"><table>
+      <thead><tr><th>ID</th><th>What</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr id="S1"><td><b>S1.</b> Preload PR first (B1–B10). B11's test is #20's own reproduction and lands in the #20 PR. 0.2.0 ships only with both.</td><td><span class="chip ok">pick</span>: users get the value sooner on main; nothing waits on the bigger rework</td></tr>
+        <tr id="S2"><td><b>S2.</b> #20 first, then preload.</td><td>Same release; preload waits on an M–L change</td></tr>
+        <tr id="S3"><td><b>S3.</b> Preload one wire at a time to avoid #20</td><td><span class="chip bad">rejected</span>: serialises startup (a config fetch then a flags fetch)</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="recommendation">
+    <h2>Recommendation</h2>
+    <p id="R1"><b>R1.</b> A1 + H1 + S1, with the <code>useTypeWire</code> falsy fix and the docs. It meets B1–B10 with two small additions (one method, one hook) and no change to any interface that adapters implement. B11 comes with #20 before 0.2.0 ships.</p>
+  </section>
+
+  <section id="bounds">
+    <h2>Bounds, latitude and my calls</h2>
+    <ul>
+      <li id="N1"><b>N1.</b> No change to <code>ResolutionContext</code> or <code>BindingContext</code>; Inversify adapter users preload with groups (B1).</li>
+      <li id="N2"><b>N2.</b> Async contract unchanged: no change to <code>apply</code>, <code>bind</code>, <code>getInstance</code>, creators or overrides.</li>
+      <li id="N3"><b>N3.</b> Not now: transient wires in <code>useTypeWire</code>; <code>useTypeWire</code> calling <code>getInstance</code> every render; F5's React 19-only provider.</li>
+      <li id="C1"><b>C1.</b> My call: <code>preload()</code> returns <code>Promise&lt;void&gt;</code>; values are read with <code>getInstanceSync</code>, so it doesn't build a map nobody uses.</li>
+      <li id="C2"><b>C2.</b> My call: on failure, <code>preload()</code> rejects with the first failing creation's error (as <code>Promise.all</code> does) and still lets the other creations finish and cache.</li>
+      <li id="C3"><b>C3.</b> My call: <code>wires</code> is an array of wires (for a group, pass its wires); transient wires in it are skipped.</li>
+      <li id="L1"><b>L1.</b> Builder decides alone: names, file layout, how <code>useTypeWire</code> tracks readiness. Checks first: any change to an existing public signature.</li>
+    </ul>
+  </section>
+
+  <section id="risks">
+    <h2>Risks</h2>
+    <ul>
+      <li id="K1"><b>K1.</b> Until #20 lands on main, a real cycle preloaded in parallel hangs. Mitigation: S1's release gate: 0.2.0 does not ship without #20.</li>
+      <li id="K2"><b>K2.</b> <code>usePreload</code> retry loops: if a preload fails, re-suspending forever is the trap. Rely on F4's error cache and test it (T7b). Timebox: half a day.</li>
+      <li id="K3"><b>K3.</b> StrictMode double render must not start a second creation; core's in-flight sharing (#28) covers it. Test it (T7).</li>
+    </ul>
+  </section>
+
+  <section id="tests">
+    <h2>Test plan</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Test</th><th>Proves</th></tr></thead>
+      <tbody>
+        <tr id="T1"><td><b>T1.</b> After <code>group.getAllInstances</code>, each wire and each import reads with <code>getInstanceSync</code>, same instance, each creator ran once.</td><td>B1</td></tr>
+        <tr id="T2"><td><b>T2.</b> After <code>container.preload()</code>: every singleton reads sync; a transient creator ran 0 times; a wire bound after the call was not created. <b>T2b:</b> <code>preload({ wires })</code> creates those wires and their imports only.</td><td>B1, B2</td></tr>
+        <tr id="T3"><td><b>T3.</b> One creator rejects: <code>preload()</code> rejects with that exact error; a second failing creator causes no <code>unhandledRejection</code>; the healthy wires are cached.</td><td>B3</td></tr>
+        <tr id="T4"><td><b>T4.</b> Second preload after more wires are applied creates only the new ones.</td><td>B4</td></tr>
+        <tr id="T5"><td><b>T5.</b> unbind, apply, preload: a new instance, not the old one.</td><td>B5</td></tr>
+        <tr id="T6"><td><b>T6.</b> React: preloaded wires with values <code>{}</code>, <code>0</code>, <code>""</code>, <code>false</code>, <code>null</code> render on first render; the fallback never appears. Fails on main for the falsy values.</td><td>B6</td></tr>
+        <tr id="T7"><td><b>T7.</b> React: <code>usePreload</code> under Suspense shows the fallback once, then the subtree; <code>useTypeWire</code> inside never suspends; one creation each, also under StrictMode. <b>T7b:</b> a failing wire reaches the error boundary once.</td><td>B7</td></tr>
+        <tr id="T8"><td><b>T8.</b> React: a wire nobody preloaded suspends, then renders.</td><td>B8</td></tr>
+        <tr id="T8b"><td><b>T8b.</b> React: with <code>{ suspend: false }</code>, an unpreloaded wire throws an error naming it, and the fallback never shows; a preloaded one renders.</td><td>D3</td></tr>
+        <tr id="T9"><td><b>T9.</b> Docs: README examples reviewed in the PR; the preload example matches a test (T6).</td><td>B9, B10</td></tr>
+        <tr id="T10"><td><b>T10.</b> #20's reproduction 2, run through <code>container.preload()</code>: <code>CircularDependency</code>, not a hang. Lands with the #20 PR.</td><td>B11</td></tr>
+      </tbody>
+    </table></div>
+    <p>One command, as in CI: <code>pnpm build &amp;&amp; pnpm test</code>.</p>
+  </section>
+
+  <section id="answer">
+    <h2>Answer recorded</h2>
+    <p>Q1: A1, as <code>preload({ wires })</code> (D1, D2). Q2: H1, as <code>usePreload({ wires })</code>, plus D3. Q3: open (D4).</p>
+  </section>
+
+  <footer>Composed 2026-11-06 by Claude Code (Opus 5.5) using html-for-humans and outcome-brief, from product.html (approved 2026-11-06), packages/core/src/index.ts, packages/react/src/index.tsx, packages/react/package.json and CHANGELOG at a9dc4ac, and issue #20.</footer>
+</main>
+</body>
+</html>
