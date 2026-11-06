@@ -5,7 +5,7 @@
  * context-based dependency resolution within React component trees.
  *
  * Key exports:
- * - {@link ReactResolutionContext} — Wraps a `ResolutionContext` with promise deduplication and error caching for React's concurrent rendering model
+ * - {@link ReactResolutionContext} — Wraps a `ResolutionContext` with error caching, so a failed resolution doesn't loop under Suspense
  * - {@link ContainerContext} — React Context holding the active resolution context
  * - {@link useContainer} — Hook to access the current resolution context
  * - {@link useTypeWire} — Hook to resolve a TypeWire with React Suspense support
@@ -24,14 +24,18 @@ import {
 } from "@typewirets/core";
 
 /**
- * A React-aware wrapper around {@link ResolutionContext} that adds promise
- * deduplication and error caching.
+ * A React-aware wrapper around {@link ResolutionContext} that caches resolution
+ * errors.
  *
- * React's concurrent rendering may call the same resolution multiple times
- * during a single render cycle. This class ensures that concurrent calls
- * for the same `TypeSymbol` share a single in-flight promise rather than
- * triggering duplicate resolutions. Once a resolution fails, the error is
- * cached so that subsequent calls throw immediately without retrying.
+ * When a component suspends on a resolution that then fails, React renders it
+ * again, and that render would start a new creation, suspend, fail and repeat
+ * forever. To stop that loop, the error from a failed `get` is cached, and
+ * later `get` and `getSync` calls for the same `TypeSymbol` throw it without
+ * calling the underlying context.
+ *
+ * Calls that run while a resolution is in flight are not deduplicated here:
+ * the underlying context does that (`TypeWireContainer` creates each singleton
+ * once), and it never hands a creation started before `unbind` to new callers.
  *
  * @example
  * ```typescript
@@ -42,8 +46,6 @@ import {
 export class ReactResolutionContext {
   /** The underlying resolution context that performs actual dependency resolution. */
   readonly #resolutionContext: ResolutionContext;
-  /** In-flight resolution promises, keyed by symbol, for deduplication. */
-  readonly #resolutions: Map<symbol, Promise<unknown>> = new Map();
   /** Cached resolution errors, keyed by symbol, to fail fast on repeated access. */
   readonly #resolutionErrors: Map<symbol, unknown> = new Map();
 
@@ -68,12 +70,11 @@ export class ReactResolutionContext {
   }
 
   /**
-   * Asynchronously resolves an instance for the given type symbol, with
-   * promise deduplication.
+   * Asynchronously resolves an instance for the given type symbol.
    *
-   * If a resolution for the same symbol is already in flight, the existing
-   * promise is returned instead of starting a new one. If a previous
-   * resolution failed, the cached error is thrown immediately.
+   * If a previous resolution for this symbol failed, the cached error is
+   * thrown immediately. Otherwise the call goes to the underlying context,
+   * which joins a creation already in flight for a singleton.
    *
    * @template T The type of the resolved instance
    * @param typeSymbol - The typed symbol identifying the dependency to resolve
@@ -85,21 +86,12 @@ export class ReactResolutionContext {
       throw this.#resolutionErrors.get(typeSymbol.symbol);
     }
 
-    const promise = this.#resolutions.get(typeSymbol.symbol) as Promise<T>;
-    if (promise) {
-      return promise;
+    try {
+      return await this.#resolutionContext.get(typeSymbol);
+    } catch (err: unknown) {
+      this.#resolutionErrors.set(typeSymbol.symbol, err);
+      throw err;
     }
-
-    const newResolution = this.#resolutionContext.get(typeSymbol);
-    this.#resolutions.set(typeSymbol.symbol, newResolution);
-    return newResolution
-      .catch((err) => {
-        this.#resolutionErrors.set(typeSymbol.symbol, err);
-        throw err;
-      })
-      .finally(() => {
-        this.#resolutions.delete(typeSymbol.symbol);
-      });
   }
 }
 
@@ -211,8 +203,8 @@ export function useTypeWire<T>(typeWire: TypeWire<T>): T {
  * React component that provides a {@link ResolutionContext} to the component tree.
  *
  * If the given `resolutionContext` is not already a {@link ReactResolutionContext},
- * it is automatically wrapped in one to enable promise deduplication and error
- * caching for React's concurrent rendering model.
+ * it is automatically wrapped in one to enable error caching, so a failed
+ * resolution reaches an error boundary instead of retrying under Suspense.
  *
  * @param props.resolutionContext - The resolution context to provide to descendants
  * @param props.children - Child components that will have access to the context
