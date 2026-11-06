@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **A singleton is created once, even when `getSync` runs while it is being created.** `getSync` (and `getInstanceSync`) used to start a second creation when an async creation was already in flight, so early callers and later callers held different instances. It now throws a retriable `AsyncOnlyBinding` and leaves the in-flight creation alone. This mostly hit `createWith` wires, which always create asynchronously ([#21](https://github.com/typewirets/typewirets/issues/21)).
+- **A creation started before `unbind` no longer touches the cache.** Its value still goes to the callers that asked for it, but the new binding's value is the one cached, and a failing old creation no longer clears the new binding's in-flight creation ([#21](https://github.com/typewirets/typewirets/issues/21)).
+- A test now pins that a value still being created when a wire is re-applied is kept ([#17](https://github.com/typewirets/typewirets/issues/17)).
 - **Node.js 22 or later is required.** `engines.node` is now `>=22`, because Node.js 20 reached end-of-life on 30 April 2026. CI tests Node.js 22, 24 and 26.
 
 ## 0.1.1

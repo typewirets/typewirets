@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>All four open issues are real: fix #21 first, then #18, then #20</title>
+<style>
+:root{
+  --bg:#f4f5f7; --surface:#ffffff; --fg:#1a1f27; --muted:#5d6672; --line:#d6dae0;
+  --accent:#2f5fd0; --accent-soft:#e6ecfb;
+  --ok:#1d7a46; --warn:#9a6200; --bad:#b3261e;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 var(--sans)}
+main{max-width:720px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:28px}
+h1{font-size:1.6rem;line-height:1.2;margin:0;text-wrap:balance}
+h2{font-size:1.15rem;margin:0 0 8px}
+h3{font-size:1rem;margin:14px 0 4px}
+p{margin:0 0 8px}
+ul,ol{margin:0 0 8px;padding-left:1.2em}
+li{margin:2px 0}
+code{font:.88em var(--mono);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+pre.out{font:12.5px/1.45 var(--mono);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px 10px;overflow-x:auto;margin:4px 0 8px}
+.meta{font:13px/1.4 var(--mono);color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
+.takeaway{background:var(--accent-soft);border-left:4px solid var(--accent);padding:12px 14px;border-radius:0 6px 6px 0;font-weight:600}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+.chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.8rem;font-weight:600;border:1px solid currentColor;white-space:nowrap}
+.chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)}
+figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px}
+figure svg{display:block;width:100%;height:auto}
+figcaption{font-size:.9rem;color:var(--muted);margin-top:8px}
+figcaption b{color:var(--fg)}
+details{margin-top:6px} summary{cursor:pointer}
+fieldset{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:0 0 12px}
+legend{font-weight:600;padding:0 4px}
+label{display:block;padding:4px 0}
+textarea{width:100%;min-height:4.5em;font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px}
+.answer pre{white-space:pre-wrap;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.45 var(--mono)}
+button{font:inherit;font-weight:600;padding:8px 14px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);cursor:pointer}
+button:focus-visible,summary:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>All four open issues are real: fix #21 first, then #18, then #20</h1>
+    <div class="meta"><span>Date: <time datetime="2026-11-05">2026-11-05</time></span><span>Author: Claude Code (Opus 5.5)</span><span>Status: agreed 2026-11-05 (Q1–Q4: A); PR 1 in progress</span><span>Source: typewirets/typewirets issues #17 #18 #20 #21, core at 67f6cfb</span></div>
+  </header>
+
+  <p class="takeaway">Every bug in the four open issues reproduces on today's <code>main</code>. #21 hits React users right now: a <code>createWith</code> wire read through <code>useTypeWire</code> is created 2–4 times. Fix it first (with #17's test), tidy the Inversify adapter (#18), ship 0.1.2, then do the bigger concurrency rework for #20.</p>
+
+  <section id="s1">
+    <h2>What each issue is, and does it hold?</h2>
+    <p>Core <code>src/</code> is unchanged since <code>42f8e5f</code>, the commit the issues cite. I ran each reproduction against the current source.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>Issue</th><th>Claim</th><th>Verified</th><th>Size</th></tr></thead>
+      <tbody>
+        <tr id="i21"><td><b>#21</b></td><td>A singleton can be created twice: <code>getSync</code> ignores an in-flight creation; a creation from before <code>unbind</code> still writes (or wipes) the cache.</td><td><span class="chip bad">Reproduced, user-facing</span></td><td>S</td></tr>
+        <tr id="i20"><td><b>#20</b></td><td>Concurrent resolves inside one creator raise a false <code>CircularDependency</code>; a real cycle entered from both ends hangs.</td><td><span class="chip bad">Reproduced, latent</span></td><td>M–L</td></tr>
+        <tr id="i18"><td><b>#18</b></td><td>Inversify adapter rebuilds a cached value on re-apply (core keeps it); un-awaited <code>bind</code> registers late; release coupling not written down.</td><td><span class="chip warn">True, partly documented</span></td><td>S</td></tr>
+        <tr id="i17"><td><b>#17</b></td><td>No test pins that an in-flight creation survives a re-apply.</td><td><span class="chip ok">Behaviour correct, test missing</span></td><td>XS</td></tr>
+      </tbody>
+    </table></div>
+    <details><summary>Reproduction output (current source, Node 24)</summary>
+<pre class="out">#21  1:  creations=2, first caller id=1, later get id=2
+#21  1b: sync createWith wire, 2x getSync before settle -> creations=2
+#21  2a: get after pre-unbind creation settles id=1, fresh caller id=2
+#21  2b: creations=3, fresh caller id=2, next get id=3
+#20  1:  Reason: CircularDependency | Resolution Path: App -> Reader -> Client -> Writer -> [Client]
+#20  2:  still pending after 1s
+#17      inflight=original, during=original, later=original, overrideRan=false</pre>
+    </details>
+  </section>
+
+  <section id="s2">
+    <h2>Order of work</h2>
+    <figure>
+      <svg viewBox="0 0 400 170" role="img" aria-labelledby="f1cap">
+        <g font-size="12" fill="var(--fg)">
+          <rect x="4" y="8" width="120" height="58" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <text x="14" y="28" font-weight="700">PR 1</text>
+          <text x="14" y="44">#21 fix + #17 test</text>
+          <text x="14" y="58" fill="var(--muted)">core only</text>
+          <rect x="140" y="8" width="120" height="58" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <text x="150" y="28" font-weight="700">PR 2</text>
+          <text x="150" y="44">#18 adapter + docs</text>
+          <text x="150" y="58" fill="var(--muted)">inversify, docs</text>
+          <rect x="276" y="8" width="120" height="58" rx="6" fill="var(--surface)" stroke="var(--ok)"/>
+          <text x="286" y="28" font-weight="700">Release 0.1.2</text>
+          <text x="286" y="44">core, react,</text>
+          <text x="286" y="58">inversify together</text>
+          <rect x="4" y="100" width="256" height="58" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <text x="14" y="120" font-weight="700">PR 3 — #20 concurrency rework</text>
+          <text x="14" y="136">per-branch resolution chain +</text>
+          <text x="14" y="150">wait-for cycle check (core)</text>
+          <rect x="276" y="100" width="120" height="58" rx="6" fill="var(--surface)" stroke="var(--ok)"/>
+          <text x="286" y="120" font-weight="700">Release 0.2.0</text>
+          <text x="286" y="136">monitor API</text>
+          <text x="286" y="150">changes</text>
+        </g>
+        <g stroke="var(--muted)" fill="none" stroke-width="1.5">
+          <path d="M124 37 H140"/><path d="M260 37 H276"/><path d="M260 129 H276"/>
+          <path d="M64 66 V100" stroke-dasharray="4 3"/>
+        </g>
+      </svg>
+      <figcaption id="f1cap"><b>Two small PRs ship as 0.1.2; #20 follows on its own.</b> PR 1 and PR 2 touch different packages and can run in parallel. PR 3 starts after PR 1 (dashed line), because both change <code>ScopedResolutionContext</code> and <code>ResolutionState</code>.
+        <details><summary>Data</summary>PR 1 (#21, #17) and PR 2 (#18) → release 0.1.2 of all three packages. PR 3 (#20), after PR 1 → release 0.2.0.</details>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="s3">
+    <h2>PR 1 — #21 and #17: one creation per singleton</h2>
+    <ul>
+      <li id="p1a"><b>P1a.</b> <code>getSync</code>: if a creation is already in flight for the token, throw a retriable <code>AsyncOnlyBinding</code> without running the creator again (<code>packages/core/src/index.ts:1384</code>).</li>
+      <li id="p1b"><b>P1b.</b> <code>registerResolution</code>: write the cache only if this creation is still the current one (<code>resolutions.get(sym) === updated</code>) and nothing is cached yet; delete the in-flight entry only on the same identity check (<code>index.ts:1275</code>).</li>
+      <li id="p1c"><b>P1c.</b> Tests: the issue's cases 1, 2a, 2b; a React mount test that counts creations (one reader, two readers in one Suspense, StrictMode — all must be 1); #17's re-apply-while-in-flight test in the P6 block of <code>singleton-cache.test.ts</code>.</li>
+    </ul>
+    <p>Open question: what does the caller of a creation that started before <code>unbind</code> receive? See <a href="#answer">Q1</a>.</p>
+  </section>
+
+  <section id="s4">
+    <h2>PR 2 — #18: say what the adapter does, and make it safe to upgrade</h2>
+    <ul>
+      <li id="p2a"><b>P2a.</b> Decide whether the adapter keeps a cached value on re-apply like core, or keeps rebuilding (<a href="#answer">Q3</a>). Either way, add a test that pins it and a README line.</li>
+      <li id="p2b"><b>P2b.</b> Un-awaited <code>adapter.bind()</code> on a bound token registers late, because it awaits <code>unbind</code> first. If Inversify 7 offers a synchronous unbind, use it; otherwise document that <code>bind</code> must be awaited. (To check against the installed Inversify.)</li>
+      <li id="p2c"><b>P2c.</b> One line in core's <code>apply</code> TSDoc: an override that changes scope (singleton → transient) does not reuse the cached value. Confirmed in code: <code>get</code> reads the new binding's scope.</li>
+      <li id="p2d"><b>P2d.</b> Add a release checklist to <code>MAINTAINING.md</code>: core, react and inversify release together, because the adapter depends on core via <code>workspace:*</code> (an exact pin once published). Open PR #23 (npm publishing workflow) should follow it.</li>
+    </ul>
+  </section>
+
+  <section id="s5">
+    <h2>PR 3 — #20: each concurrent branch keeps its own chain</h2>
+    <ul>
+      <li id="p3a"><b>P3a. False cycle.</b> Today one <code>CircularDependencyMonitor</code> with one mutable stack serves a whole request, so siblings resolved with <code>Promise.all</code> see each other. Each <code>get</code> should hand its creator a child context carrying its own, immutable chain. That also removes the <code>remove()</code> bug that pops the wrong entry and garbles the printed path (<code>index.ts:865</code>).</li>
+      <li id="p3b"><b>P3b. Hang.</b> Before awaiting another request's in-flight creation (<code>index.ts:1348</code>), walk a container-level wait-for map (creation → the creations it is awaiting). If the walk reaches the caller's own chain, throw <code>CircularDependency</code> instead of waiting.</li>
+      <li id="p3c"><b>P3c. API.</b> <code>ResolutionRequestMonitor</code> and <code>resolutionRequestMonitorFactory</code> are public, and their shape assumes one stack per request. Changing that is a breaking change for custom monitors, hence 0.2.0.</li>
+      <li id="p3d"><b>P3d.</b> Tests: both repros; the printed path for a real cycle under concurrency; no regression in the existing per-request isolation tests.</li>
+    </ul>
+    <p>Open question: how to carry the chain. See <a href="#answer">Q2</a>.</p>
+  </section>
+
+  <section id="answer" class="answer">
+    <h2>Your answer</h2>
+    <form id="answer-form">
+      <fieldset>
+        <legend>Q1. #21: a creation started before unbind finishes. What does its caller get?</legend>
+        <label><input type="radio" name="Q1" value="A — recommended: its own value, cache untouched (it asked before unbind; no surprise rejection)" checked> A (recommended): its own value; the cache stays untouched</label>
+        <label><input type="radio" name="Q1" value="B — reject with an error, like the Python port"> B: reject with an error, like the Python port</label>
+      </fieldset>
+      <fieldset>
+        <legend>Q2. #20: how should each branch carry its resolution chain?</legend>
+        <label><input type="radio" name="Q2" value="A — recommended: child context per get (works in browsers and React, no Node-only API)" checked> A (recommended): a child context per <code>get</code>; works in browsers</label>
+        <label><input type="radio" name="Q2" value="B — AsyncLocalStorage (smaller diff, but Node-only)"> B: <code>AsyncLocalStorage</code>; smaller diff, Node-only</label>
+      </fieldset>
+      <fieldset>
+        <legend>Q3. #18: on re-apply after resolve, what should the Inversify adapter do?</legend>
+        <label><input type="radio" name="Q3" value="A — recommended: keep rebuilding, document it and pin it with a test (caching stays Inversify's job)" checked> A (recommended): keep rebuilding; document and test it</label>
+        <label><input type="radio" name="Q3" value="B — keep the cached value, matching core (P6 holds everywhere)"> B: keep the cached value, matching core</label>
+      </fieldset>
+      <fieldset>
+        <legend>Q4. Release plan?</legend>
+        <label><input type="radio" name="Q4" value="A — recommended: 0.1.2 after PR 1 + PR 2, #20 later as 0.2.0" checked> A (recommended): 0.1.2 now with PR 1 + 2; #20 as 0.2.0</label>
+        <label><input type="radio" name="Q4" value="B — one release once all three PRs land"> B: one release after all three PRs</label>
+      </fieldset>
+      <label for="notes">Anything else?</label>
+      <textarea id="notes" name="notes" placeholder="Optional"></textarea>
+    </form>
+    <p>Copy this and paste it back into the chat:</p>
+    <pre id="answer-text"></pre>
+    <button type="button" id="copy">Copy answer</button>
+  </section>
+
+  <footer>Composed 2026-11-05 by Claude Code (Opus 5.5) using html-for-humans, from GitHub issues #17, #18, #20, #21 on typewirets/typewirets, packages/core/src/index.ts and packages/inversify/src/index.ts at 67f6cfb, and the issues' reproduction scripts run on Node 24.13.</footer>
+</main>
+<script>
+(function(){
+  var form=document.getElementById('answer-form'); if(!form) return;
+  var out=document.getElementById('answer-text'), btn=document.getElementById('copy');
+  var title=document.querySelector('h1').textContent.trim();
+  function build(){
+    var lines=['Answer to: '+title];
+    form.querySelectorAll('fieldset').forEach(function(fs){
+      var picked=fs.querySelector('input:checked');
+      lines.push(fs.querySelector('legend').textContent.trim()+' → '+(picked?picked.value:'(no answer)'));
+    });
+    var notes=form.querySelector('textarea').value.trim();
+    if(notes) lines.push('Notes: '+notes);
+    out.textContent=lines.join('\n');
+  }
+  form.addEventListener('input',build); build();
+  btn.addEventListener('click',function(){
+    var done=function(){btn.textContent='Copied';setTimeout(function(){btn.textContent='Copy answer'},1500)};
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(out.textContent).then(done,function(){selectText()});
+    } else selectText();
+  });
+  function selectText(){var r=document.createRange();r.selectNodeContents(out);var s=getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='Selected, copy it'}
+})();
+</script>
+</body>
+</html>

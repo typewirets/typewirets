@@ -1267,6 +1267,11 @@ class ResolutionState {
    * Registers a new resolution promise and sets up handlers to update the singleton cache.
    * This method ensures that singleton instances are properly cached once resolved
    * and that in-progress resolutions are tracked.
+   *
+   * A resolution only touches the cache while it is still the current one for its
+   * symbol. If the symbol was unbound while it was in flight, its value goes to
+   * its own callers but is never cached, and it never removes a newer resolution.
+   * The first value cached for a binding is kept.
    * @template T The type of the instance being resolved
    * @param typeSymbol The type symbol being resolved
    * @param created The promise that will resolve to the instance
@@ -1276,16 +1281,22 @@ class ResolutionState {
     typeSymbol: TypeSymbol<T>,
     created: Promise<T>,
   ): Promise<T> {
-    const updated = created
+    const symbol = typeSymbol.symbol;
+    const isCurrent = () => this.resolutions.get(symbol) === updated;
+    const updated: Promise<T> = created
       .then((value) => {
-        this.singletons.set(typeSymbol.symbol, value);
+        if (isCurrent() && !this.singletons.has(symbol)) {
+          this.singletons.set(symbol, value);
+        }
         return value;
       })
       .finally(() => {
-        this.resolutions.delete(typeSymbol.symbol);
+        if (isCurrent()) {
+          this.resolutions.delete(symbol);
+        }
       });
 
-    this.resolutions.set(typeSymbol.symbol, updated);
+    this.resolutions.set(symbol, updated);
     return updated;
   }
 
@@ -1384,6 +1395,11 @@ class ScopedResolutionContext implements ResolutionContext {
       if (scope === ScopeSingleton) {
         if (this.resolutionState.hasSingletonValue(typeSymbol)) {
           return this.resolutionState.getSingletonValue(typeSymbol) as T;
+        }
+
+        // A creation is already in flight: wait for it instead of starting another.
+        if (this.resolutionState.getRunningResolver(typeSymbol)) {
+          throw TypeWireError.asyncBindingOnly();
         }
 
         const result = creator(this);
