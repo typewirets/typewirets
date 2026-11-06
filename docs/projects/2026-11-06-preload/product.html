@@ -59,7 +59,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
 <main>
   <header>
     <h1>An app loads its async wires once per phase, and React components then render without waiting</h1>
-    <div class="meta"><span>Key: preload</span><span>Date: <time datetime="2026-11-06">2026-11-06</time></span><span>Author: Claude Code (Opus 5.5), with the maintainer</span><span>Status: awaiting approval</span><span>Source: the maintainer's answers in chat on 2026-11-06; follows the sync-createwith decision</span></div>
+    <div class="meta"><span>Key: preload</span><span>Date: <time datetime="2026-11-06">2026-11-06</time></span><span>Author: Claude Code (Opus 5.5), with the maintainer</span><span>Status: approved 2026-11-06</span><span>Source: the maintainer's answers in chat on 2026-11-06; follows the sync-createwith decision</span></div>
   </header>
 
   <p class="takeaway">Async stays the wire contract. An app waits for its async wires once, at the start of each phase of its life (startup, login, a route), and from then on its components read those wires synchronously: no fallback flash, no loading waterfall. The behaviour below delivers that.</p>

@@ -2,8 +2,8 @@
 
 An app waits for its async wires once per phase (startup, login, route), and React components then read them synchronously. Async stays the wire contract (decided in [../2026-11-05-sync-createwith](../2026-11-05-sync-createwith/README.md)).
 
-- [product.html](product.html): value V0–V4, behaviour B1–B11. Status: awaiting approval.
-- design.html: not written yet; comes after approval.
+- [product.html](product.html): value V0–V4, behaviour B1–B11. Status: approved 2026-11-06.
+- [design.html](design.html): approaches A1–A3, H1–H3, S1–S3; recommendation A1 + H1 + S1; test plan T1–T10. Status: awaiting a pick.
 
 ## Where things stand
 
@@ -17,5 +17,5 @@ An app waits for its async wires once per phase (startup, login, route), and Rea
 
 ## Next steps
 
-1. Approval of product.html.
-2. Design brief: API shape for B2 and B7, what replaces `getAllAsync`, ordering with #20, test plan.
+1. Pick Q1–Q3 in design.html.
+2. Build per the pick; every B line gets its T test.
