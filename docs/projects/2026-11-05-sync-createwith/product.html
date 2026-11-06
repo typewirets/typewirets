@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A createWith wire with only synchronous imports is ready synchronously, on first use</title>
+<style>
+/* Tokens: change values here only. Light first, dark redefines the same names. */
+:root{
+  --bg:#f4f5f7; --surface:#ffffff; --fg:#1a1f27; --muted:#5d6672; --line:#d6dae0;
+  --accent:#2f5fd0; --accent-soft:#e6ecfb;
+  --ok:#1d7a46; --warn:#9a6200; --bad:#b3261e;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+/* Dark: follows the OS unless the viewer picked light; data-theme="dark" forces it. */
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 var(--sans)}
+main{max-width:720px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:28px}
+h1{font-size:1.6rem;line-height:1.2;margin:0;text-wrap:balance}
+h2{font-size:1.15rem;margin:0 0 8px}
+p{margin:0 0 8px}
+.meta{font:13px/1.4 var(--mono);color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
+.takeaway{background:var(--accent-soft);border-left:4px solid var(--accent);padding:12px 14px;border-radius:0 6px 6px 0;font-weight:600}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.8rem;font-weight:600;border:1px solid currentColor}
+.chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)}
+figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px}
+figure svg{display:block;width:100%;height:auto}
+figcaption{font-size:.9rem;color:var(--muted);margin-top:8px}
+figcaption b{color:var(--fg)}
+details{margin-top:6px} summary{cursor:pointer}
+fieldset{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:0 0 12px}
+legend{font-weight:600;padding:0 4px}
+label{display:block;padding:4px 0}
+textarea{width:100%;min-height:4.5em;font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px}
+.answer pre{white-space:pre-wrap;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.45 var(--mono)}
+button{font:inherit;font-weight:600;padding:8px 14px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);cursor:pointer}
+button:focus-visible,summary:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>A createWith wire with only synchronous imports is ready synchronously, on first use</h1>
+    <div class="meta"><span>Key: sync-createwith</span><span>Date: <time datetime="2026-11-05">2026-11-05</time></span><span>Author: Claude Code (Opus 5.5)</span><span>Status: awaiting approval</span><span>Source: issue #21, PR #28 review, core at 67f6cfb</span></div>
+  </header>
+
+  <p class="takeaway">Code that reads a synchronous <code>createWith</code> wire gets its value at once, the first time, and React components that use it render without a loading fallback. Wires that need async work keep behaving exactly as they do today.</p>
+
+  <section id="value">
+    <h2>Value</h2>
+    <ul>
+      <li id="V0"><b>V0.</b> For apps built on typewirets, and React apps most of all: a wire that needs no async work can be read synchronously from the first read, so the sync API and <code>useTypeWire</code> work for it without preloading and without a flash of fallback.</li>
+      <li id="V1"><b>V1.</b> The recommended way to declare a wire (<code>imports</code> + <code>createWith</code>) stops costing a Suspense round trip.</li>
+      <li id="V2"><b>V2.</b> <code>getInstanceSync</code> means what it says: it fails only when something really is asynchronous.</li>
+      <li id="V3"><b>V3.</b> Nothing that works today breaks: async wires, cycle errors and "created once" all hold.</li>
+    </ul>
+  </section>
+
+  <section id="behaviour">
+    <h2>Behaviour</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Group</th><th>What happens</th></tr></thead>
+      <tbody>
+        <tr id="B1"><td>Sync read</td><td><b>B1.</b> A <code>createWith</code> wire whose <code>createWith</code> returns a value, and whose imports are all synchronous (all the way down, including other <code>createWith</code> wires), returns its value from <code>getInstanceSync</code> / <code>container.getSync</code> on first use, without any earlier <code>getInstance</code>.</td></tr>
+        <tr id="B2"><td>Sync read</td><td><b>B2.</b> Each singleton in that tree is created once, and later sync or async reads return the same instance.</td></tr>
+        <tr id="B3"><td>React</td><td><b>B3.</b> <code>useTypeWire</code> on such a wire renders the component on first mount without showing the Suspense fallback, and creates it once (also under <code>StrictMode</code>).</td></tr>
+        <tr id="B4"><td>Async stays async</td><td><b>B4.</b> A wire with any async import anywhere in its tree, or whose <code>createWith</code> returns a promise, resolves through <code>getInstance</code> as today. <code>getInstanceSync</code> throws a retriable <code>AsyncOnlyBinding</code> until the value is cached, then returns it.</td></tr>
+        <tr id="B5"><td>Async stays async</td><td><b>B5.</b> Every import is created once per resolution as today, including a transient import whose creator is async (it is not run a second time to "try sync first").</td></tr>
+        <tr id="B6"><td>Errors</td><td><b>B6.</b> A cycle through <code>createWith</code> wires raises <code>CircularDependency</code>, whether reached by a sync or an async read, and the printed resolution path names the wires in the order they were entered.</td></tr>
+        <tr id="B7"><td>Errors</td><td><b>B7.</b> When a sync wire's <code>createWith</code> or a sync import throws, <code>getInstanceSync</code> throws that error itself (today it throws <code>AsyncOnlyBinding</code> and the real error surfaces later). <code>getInstance</code> rejects with it, as today.</td></tr>
+        <tr id="B8"><td>Upgrade</td><td><b>B8.</b> The changelog and docs say that a <code>createWith</code> wire's creator can now return a value instead of a promise, and that <code>withCreator</code> decorators should <code>await</code> (or otherwise accept a plain value from) the creator they wrap.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <footer>Composed 2026-11-05 by Claude Code (Opus 5.5) using html-for-humans and outcome-brief, from issue #21, PR #28 and its review, packages/core/src/index.ts and packages/react/src/index.tsx at 67f6cfb. Design choices are in design.html.</footer>
+</main>
+</body>
+</html>
