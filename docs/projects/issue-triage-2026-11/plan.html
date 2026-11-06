@@ -61,7 +61,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
 <main>
   <header>
     <h1>All four open issues are real: fix #21 first, then #18, then #20</h1>
-    <div class="meta"><span>Date: <time datetime="2026-11-05">2026-11-05</time></span><span>Author: Claude Code (Opus 5.5)</span><span>Status: agreed 2026-11-05 (Q1–Q4: A); PR 1 is #28, PR 2 is #29</span><span>Source: typewirets/typewirets issues #17 #18 #20 #21, core at 67f6cfb</span></div>
+    <div class="meta"><span>Date: <time datetime="2026-11-05">2026-11-05</time></span><span>Author: Claude Code (Opus 5.5)</span><span>Status: agreed 2026-11-05 (Q1–Q4: A); updated 2026-11-06, see "Where it stands"</span><span>Source: typewirets/typewirets issues #17 #18 #20 #21, core at 67f6cfb</span></div>
   </header>
 
   <p class="takeaway">Every bug in the four open issues reproduces on today's <code>main</code>. #21 hits React users right now: a <code>createWith</code> wire read through <code>useTypeWire</code> is created 2–4 times. Fix it first (with #17's test), tidy the Inversify adapter (#18), ship 0.1.2, then do the bigger concurrency rework for #20.</p>
@@ -140,7 +140,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
     <h2>PR 2 — #18: say what the adapter does, and make it safe to upgrade</h2>
     <ul>
       <li id="p2a"><b>P2a.</b> Decide whether the adapter keeps a cached value on re-apply like core, or keeps rebuilding (<a href="#answer">Q3</a>). Either way, add a test that pins it and a README line.</li>
-      <li id="p2b"><b>P2b.</b> Un-awaited <code>adapter.bind()</code> on a bound token registers late, because it awaits <code>unbind</code> first. If Inversify 7 offers a synchronous unbind, use it; otherwise document that <code>bind</code> must be awaited. (To check against the installed Inversify.)</li>
+      <li id="p2b"><b>P2b.</b> Un-awaited <code>adapter.bind()</code> on a bound token registers late, because it awaits <code>unbind</code> first. Resolved: Inversify 7 has no synchronous unbind (its <code>container.unbind</code> returns a promise, and until it settles the old binding still resolves), so #29 documents that <code>bind</code> and <code>apply</code> must be awaited.</li>
       <li id="p2c"><b>P2c.</b> One line in core's <code>apply</code> TSDoc: an override that changes scope (singleton → transient) does not reuse the cached value. Confirmed in code: <code>get</code> reads the new binding's scope.</li>
       <li id="p2d"><b>P2d.</b> Add a release checklist to <code>MAINTAINING.md</code>: core, react and inversify release together, because the adapter depends on core via <code>workspace:*</code> (an exact pin once published). Open PR #23 (npm publishing workflow) should follow it.</li>
     </ul>
@@ -157,8 +157,23 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
     <p>Open question: how to carry the chain. See <a href="#answer">Q2</a>.</p>
   </section>
 
+  <section id="status">
+    <h2>Where it stands</h2>
+    <p>Decisions taken after the plan was agreed, and the pull requests that carry it out.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>PR</th><th>What it does</th><th>State</th></tr></thead>
+      <tbody>
+        <tr id="pr28"><td><b>#28</b></td><td>PR 1: #21 fix and #17 test in core. Review also fixed: a failing creation started by <code>getSync</code> no longer causes an unhandled rejection, and the in-flight error is <code>retriable</code> on <code>container.getSync</code> too.</td><td><span class="chip warn">Open</span></td></tr>
+        <tr id="pr29"><td><b>#29</b></td><td>PR 2: #18. The Inversify adapter keeps rebuilding on re-apply (Q3), with a test, docs, and a release checklist.</td><td><span class="chip warn">Open</span></td></tr>
+        <tr id="pr31"><td><b>#31</b></td><td>Follow-up from #28's review: <code>ReactResolutionContext</code> no longer hands out a creation started before <code>unbind</code>. Decided 2026-11-06: <b>React-only</b>, with no new core API. Known limit: a cached error from before an <code>unbind</code> sticks until it is reset the way #31's README describes.</td><td><span class="chip warn">Open, stacked on #28</span></td></tr>
+        <tr id="pr30"><td><b>#30</b></td><td>This page.</td><td><span class="chip warn">Open</span></td></tr>
+        <tr id="next"><td><b>Next</b></td><td>PR 3 (#20) after #28 merges. A brief for letting synchronous <code>createWith</code> wires resolve with <code>getSync</code> (the root cause behind #21's React symptom) is waiting for approval and proposes stacking on #20 for 0.2.0.</td><td><span class="chip">Not started</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
   <section id="answer" class="answer">
-    <h2>Your answer</h2>
+    <h2>Your answer (recorded: Q1–Q4 all A)</h2>
     <form id="answer-form">
       <fieldset>
         <legend>Q1. #21: a creation started before unbind finishes. What does its caller get?</legend>
@@ -188,7 +203,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
     <button type="button" id="copy">Copy answer</button>
   </section>
 
-  <footer>Composed 2026-11-05 by Claude Code (Opus 5.5) using html-for-humans, from GitHub issues #17, #18, #20, #21 on typewirets/typewirets, packages/core/src/index.ts and packages/inversify/src/index.ts at 67f6cfb, and the issues' reproduction scripts run on Node 24.13.</footer>
+  <footer>Composed 2026-11-05 by Claude Code (Opus 5.5) using html-for-humans, from GitHub issues #17, #18, #20, #21 on typewirets/typewirets, packages/core/src/index.ts and packages/inversify/src/index.ts at 67f6cfb, and the issues' reproduction scripts run on Node 24.13. Updated 2026-11-06 with the decisions and PRs since.</footer>
 </main>
 <script>
 (function(){
