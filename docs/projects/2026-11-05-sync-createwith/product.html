@@ -86,6 +86,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
         <tr id="B5"><td>Async stays async</td><td><b>B5.</b> Every import is created once per resolution as today, including a transient import whose creator is async (it is not run a second time to "try sync first").</td></tr>
         <tr id="B6"><td>Errors</td><td><b>B6.</b> A cycle through <code>createWith</code> wires raises <code>CircularDependency</code>, whether reached by a sync or an async read, and the printed resolution path names the wires in the order they were entered.</td></tr>
         <tr id="B7"><td>Errors</td><td><b>B7.</b> When a sync wire's <code>createWith</code> or a sync import throws, <code>getInstanceSync</code> throws that error itself (today it throws <code>AsyncOnlyBinding</code> and the real error surfaces later). <code>getInstance</code> rejects with it, as today.</td></tr>
+        <tr id="B9"><td>Unchanged</td><td><b>B9.</b> <code>apply</code> and <code>bind</code> stay async and are awaited as today; <code>getInstance</code> and <code>container.get</code> always return a promise. Only a synchronous read of a fully synchronous <code>createWith</code> wire changes.</td></tr>
         <tr id="B8"><td>Upgrade</td><td><b>B8.</b> The changelog and docs say that a <code>createWith</code> wire's creator can now return a value instead of a promise, and that <code>withCreator</code> decorators should <code>await</code> (or otherwise accept a plain value from) the creator they wrap.</td></tr>
       </tbody>
     </table></div>

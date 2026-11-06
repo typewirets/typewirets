@@ -76,6 +76,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
       </tbody>
     </table></div>
     <ul>
+      <li id="E0"><b>E0. Nothing is inferred up front.</b> Whether an import is async can't be known before it runs. A1 doesn't guess: it runs each import once and looks at the answer (a value or a promise), as the container already does for plain <code>creator</code> wires. At the first promise it keeps that promise and finishes the rest async. A second spike of this on current main: an all-sync tree read sync on first use, each wire created once; a tree with an async import threw retriable <code>AsyncOnlyBinding</code> on a sync read, then <code>getInstance</code> worked and the async import was created once; a transient async import was created once per <code>getInstance</code>.</li>
       <li><b>Why E1:</b> <code>CircularDependencyMonitor.remove</code> pops the top of a stack shared by the whole request (index.ts:865). A sync frame that ends after an async child was pushed pops the child instead of itself. #20 (P3a in the triage plan) replaces this stack with a per-step chain.</li>
       <li><b>Why E2:</b> <code>getSync</code> runs a transient creator, gets a promise, throws, and drops the promise; the fallback runs it again.</li>
       <li><b>Inversify:</b> the adapter's <code>getSync</code> throws Inversify's own error for an async binding, not <code>AsyncOnlyBinding</code>, so a <code>getSync</code> probe can't tell "async" from "broken" there.</li>
