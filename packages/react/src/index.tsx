@@ -9,6 +9,7 @@
  * - {@link ContainerContext} — React Context holding the active resolution context
  * - {@link useContainer} — Hook to access the current resolution context
  * - {@link useTypeWire} — Hook to resolve a TypeWire with React Suspense support
+ * - {@link usePreload} — Hook that suspends a subtree once until a set of wires is created
  * - {@link ResolutionContextProvider} — Component that provides a resolution context to the tree
  *
  * @packageDocumentation
@@ -17,6 +18,7 @@
 import * as React from "react";
 import {
   type AnyTypeSymbol,
+  type AnyTypeWire,
   type ResolutionContext,
   type TypeSymbol,
   type TypeWire,
@@ -208,23 +210,87 @@ export function useContainer() {
 }
 
 /**
+ * Options for {@link useTypeWire}.
+ */
+export interface UseTypeWireOpts {
+  /**
+   * What to do when the value isn't created yet. `true` (the default)
+   * suspends until it is, so the nearest `<Suspense>` shows its fallback.
+   * `false` throws a `TypeWireError` with reason `NotPreloaded` naming the
+   * wire instead, for apps that preload every phase and never want a
+   * fallback: a forgotten preload then shows up at once, in development.
+   */
+  suspend?: boolean;
+}
+
+/** Error reason thrown by {@link useTypeWire} with `{ suspend: false }`. */
+const ReasonNotPreloaded = "NotPreloaded";
+
+const ScopeSingleton = "singleton";
+
+/** Marks a state that has no value yet, so falsy values still count as values. */
+const NotReady: unique symbol = Symbol("NotReady");
+
+/**
+ * Reads a wire synchronously. Returns `NotReady` when the value isn't
+ * created yet and can be waited for; rethrows any other error.
+ */
+function readSync<T>(
+  typeWire: TypeWire<T>,
+  container: ResolutionContext,
+): T | typeof NotReady {
+  try {
+    return typeWire.getInstanceSync(container);
+  } catch (err: unknown) {
+    if (err instanceof TypeWireError && err.retriable) {
+      return NotReady;
+    }
+
+    throw err;
+  }
+}
+
+function notPreloaded(typeWire: AnyTypeWire, cause: unknown) {
+  const name = typeWire.type.symbol.description ?? "(unnamed wire)";
+  const err = new TypeWireError(
+    ReasonNotPreloaded,
+    `${name} is not ready. It was rendered with { suspend: false } before it was created: preload it (container.preload or usePreload) before this component renders.`,
+  );
+  err.retriable = false;
+  Object.defineProperty(err, "cause", {
+    value: cause,
+    enumerable: false,
+    writable: true,
+    configurable: true,
+  });
+  return err;
+}
+
+/**
  * Hook that resolves a {@link TypeWire} within the current container context,
  * with React Suspense integration.
  *
  * Resolution behavior:
  * 1. **Sync available** — If the wire can be resolved synchronously (e.g., a singleton
- *    that was already created), the value is returned immediately.
+ *    that was already created or preloaded), the value is returned immediately,
+ *    including falsy values such as `0`, `""`, `false` and `null`.
  * 2. **Async pending** — If sync resolution fails with a retriable error, the hook
  *    starts an async resolution and throws the promise to trigger React Suspense.
+ *    With `{ suspend: false }` it throws a `TypeWireError` with reason
+ *    `NotPreloaded` instead.
  * 3. **Error** — If sync resolution fails with a non-retriable error, it is re-thrown.
  *
- * This hook must be used inside a `<Suspense>` boundary when resolving wires
- * with asynchronous creators.
+ * To render without a fallback, preload the wires first, with
+ * `container.preload` before rendering or {@link usePreload} higher in the
+ * tree. A wire nobody preloaded suspends, so this hook must be used inside a
+ * `<Suspense>` boundary unless you pass `{ suspend: false }`.
  *
  * @template T The type of the resolved instance
  * @param typeWire - The TypeWire to resolve
+ * @param opts - Optional settings; see {@link UseTypeWireOpts}
  * @returns The resolved instance
  * @throws The resolution promise when the value is not yet available (for Suspense)
+ * @throws {@link TypeWireError} with reason `NotPreloaded` when the value is not yet available and `suspend` is `false`
  * @throws {@link TypeWireError} if synchronous resolution fails with a non-retriable error
  *
  * @example
@@ -234,25 +300,34 @@ export function useContainer() {
  *   return <div>{userService.getName()}</div>;
  * }
  *
- * // Wrap in Suspense for async wires
+ * // Preloaded before rendering: no fallback.
+ * await container.preload({ wires: [UserServiceWire] });
+ *
+ * // Or wrap in Suspense for wires that may not be ready yet.
  * <Suspense fallback={<Loading />}>
  *   <UserProfile />
  * </Suspense>
  * ```
  */
-export function useTypeWire<T>(typeWire: TypeWire<T>): T {
+export function useTypeWire<T>(
+  typeWire: TypeWire<T>,
+  opts?: UseTypeWireOpts,
+): T {
   const container = useContainer();
-  const [value, setValue] = React.useState(() => {
-    try {
-      return typeWire.getInstanceSync(container);
-    } catch (err: unknown) {
-      if (err instanceof TypeWireError && err.retriable) {
-        return null;
-      }
+  const suspend = opts?.suspend ?? true;
+  const [state, setState] = React.useState<{ value: T | typeof NotReady }>(
+    () => ({ value: readSync(typeWire, container) }),
+  );
 
-      throw err;
+  if (state.value === NotReady && !suspend) {
+    let cause: unknown;
+    try {
+      typeWire.getInstanceSync(container);
+    } catch (err: unknown) {
+      cause = err;
     }
-  });
+    throw notPreloaded(typeWire, cause);
+  }
 
   const promise = typeWire.getInstance(container);
   React.useEffect(() => {
@@ -261,7 +336,10 @@ export function useTypeWire<T>(typeWire: TypeWire<T>): T {
     promise
       .then((value) => {
         if (mounted) {
-          setValue(() => value);
+          // Keep the same state object for the same value, so React skips the
+          // re-render; a new object here would re-render, start a new
+          // `getInstance` and run this effect again, forever.
+          setState((prev) => (Object.is(prev.value, value) ? prev : { value }));
         }
       })
       .catch((err) => {
@@ -274,11 +352,70 @@ export function useTypeWire<T>(typeWire: TypeWire<T>): T {
     };
   }, [promise]);
 
-  if (value) {
-    return value;
+  if (state.value !== NotReady) {
+    return state.value;
   }
 
   throw promise;
+}
+
+/**
+ * Options for {@link usePreload}.
+ */
+export interface UsePreloadOpts {
+  /**
+   * The wires to create before the calling component renders. Their imports
+   * are created with them. Wires that aren't singletons are skipped. To
+   * preload a group, pass its `wires`.
+   */
+  wires: readonly AnyTypeWire[];
+}
+
+/**
+ * Hook that suspends the calling component until every singleton in
+ * `opts.wires` is created, so components below it read them with
+ * {@link useTypeWire} without suspending.
+ *
+ * Use it where a part of the app starts (a route, a panel, a feature), under
+ * one `<Suspense>` boundary: the fallback shows once for the whole set, and
+ * the creations run in parallel. A creation that fails reaches the nearest
+ * error boundary.
+ *
+ * It works with any resolution context, including the Inversify adapter.
+ * Outside React, use `container.preload` instead.
+ *
+ * @param opts - The wires to preload; see {@link UsePreloadOpts}
+ * @throws A promise while any of the wires is still being created (for Suspense)
+ * @throws The creation's error, once one has failed
+ *
+ * @example
+ * ```tsx
+ * function ReportsRoute() {
+ *   usePreload({ wires: [reportsServiceWire, chartsWire] });
+ *   return <ReportsPage />;
+ * }
+ *
+ * <Suspense fallback={<Loading />}>
+ *   <ReportsRoute />
+ * </Suspense>
+ * ```
+ */
+export function usePreload(opts: UsePreloadOpts): void {
+  const container = useContainer();
+  const pending: Promise<unknown>[] = [];
+  for (const wire of opts.wires) {
+    if ((wire.scope ?? ScopeSingleton) !== ScopeSingleton) {
+      continue;
+    }
+
+    if (readSync(wire, container) === NotReady) {
+      pending.push(wire.getInstance(container));
+    }
+  }
+
+  if (pending.length > 0) {
+    throw Promise.all(pending);
+  }
 }
 
 /**

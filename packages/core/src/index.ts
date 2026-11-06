@@ -751,6 +751,18 @@ function defaultResolutionRequestMonitorFactory(
  * @template T The type of the action's result
  * @throws {TypeWireError | Error} If the action fails
  */
+/**
+ * Options for {@link TypeWireContainer.preload}.
+ */
+export interface PreloadOpts {
+  /**
+   * The wires to create, with the imports they resolve. Omit to create every
+   * singleton bound at the time of the call. Wires whose binding is not a
+   * singleton are skipped. To preload a group, pass its `wires`.
+   */
+  wires?: readonly AnyTypeWire[];
+}
+
 export type SyncAction<T> = () => T;
 
 /**
@@ -1573,7 +1585,62 @@ export class TypeWireContainer implements ResolutionContext, BindingContext {
   }
 
   /**
+   * Creates singleton values ahead of time, so they can be read synchronously
+   * with `getInstanceSync` (or `useTypeWire` in React) afterwards.
+   *
+   * Without `wires`, every singleton bound when you call it is created. With
+   * `wires`, only those wires and the imports they resolve are created. Wires
+   * whose binding is not a singleton (for example transient) are skipped:
+   * their values aren't cached, so there is nothing to read later. Values
+   * already created are kept, so calling `preload` again creates only what is
+   * new. Wires bound after the call are not included.
+   *
+   * Creations run in parallel. If one fails, the returned promise rejects
+   * with that creation's own error, as `Promise.all` does, and the other
+   * creations still finish and are cached. A wire in `wires` that isn't bound
+   * rejects with a `BindingNotFound` error.
+   *
+   * @param opts Optional settings; see {@link PreloadOpts}
+   * @returns A promise that resolves once every selected value is created
+   *
+   * @example
+   * ```typescript
+   * // At startup: everything the shell needs.
+   * await container.preload({ wires: [configWire, authWire] });
+   *
+   * // Later, when a feature loads:
+   * await reportsWireGroup.apply(container);
+   * await container.preload({ wires: reportsWireGroup.wires });
+   *
+   * // Small apps and tests: every bound singleton.
+   * await container.preload();
+   *
+   * const config = configWire.getInstanceSync(container);
+   * ```
+   */
+  async preload(opts?: PreloadOpts): Promise<void> {
+    const targets: AnyTypeSymbol[] = opts?.wires
+      ? opts.wires.map((wire) => wire.type)
+      : this.resolutionState.getAllBindings().map((wire) => wire.type);
+
+    await Promise.all(
+      targets.map(async (typeSymbol) => {
+        const binding = this.resolutionState.getBinding(typeSymbol);
+        if ((binding.scope ?? ScopeSingleton) !== ScopeSingleton) {
+          return;
+        }
+        await this.get(typeSymbol);
+      }),
+    );
+  }
+
+  /**
    * Gets all instances from the container asynchronously.
+   *
+   * @deprecated Use {@link TypeWireContainer.preload} to create singletons
+   * ahead of time, then read them with `getInstanceSync`. This method resolves
+   * bindings one at a time and also creates a value for every transient
+   * binding.
    * @returns A promise that resolves to a map of all instances
    */
   async getAllAsync(): Promise<Map<symbol, unknown>> {

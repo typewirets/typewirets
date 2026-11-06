@@ -109,6 +109,27 @@ const userServiceWire = typeWireOf({
 });
 ```
 
+### Preloading
+
+Getting a value is async: `getInstance` returns a promise, because any creator, or an override applied later with `withCreator`, may be async. To read values synchronously, create them ahead of time with `container.preload`, then use `getInstanceSync`:
+
+```typescript
+const container = new TypeWireContainer();
+await shellWireGroup.apply(container);
+
+// Startup: the wires the app needs first, and their imports, in parallel.
+await container.preload({ wires: shellWireGroup.wires });
+
+const config = configWire.getInstanceSync(container); // no await
+```
+
+- `container.preload()` with no options creates every singleton bound at the time of the call. That suits small apps, servers and tests.
+- `preload({ wires })` creates those wires and their imports. Call it once per phase of your app (startup, after login, when a feature loads), so each phase waits only for what it needs.
+- Values already created are kept, so a later `preload` creates only what's new. Wires that aren't singletons are skipped, because their values aren't cached.
+- If a creation fails, `preload` rejects with that creation's error; the other creations still finish and are cached.
+
+`container.getAllAsync()` is deprecated in favour of `preload`: it resolves bindings one at a time and also creates every transient binding.
+
 ### Composing Services
 
 TypeWire makes it easy to compose and override services:

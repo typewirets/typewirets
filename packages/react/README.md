@@ -33,6 +33,10 @@ async function main() {
 
   // Apply all wires to the container at once
   await wireGroup.apply(container);
+
+  // Create them before the first render, so components read them
+  // synchronously and no Suspense fallback appears
+  await container.preload({ wires: wireGroup.wires });
   
   // Render your React app with the container
   const rootEl = document.getElementById("root");
@@ -149,9 +153,50 @@ export function UserList() {
 }
 ```
 
+## Preloading
+
+React renders synchronously, but getting a TypeWire's value is async: any creator, or an override applied later, may be async. Preloading does that waiting at your app's own boundaries, so components read values synchronously:
+
+| Where | How | What the user sees |
+|---|---|---|
+| Before the first render | `await container.preload({ wires })` (or `container.preload()` for every singleton) | No fallback at all |
+| Where a part of the app starts (a route, a panel, a feature) | `usePreload({ wires })` under one `<Suspense>` | One fallback for the whole set, then the subtree renders without suspending again |
+| Nowhere | `useTypeWire` suspends on first use | A fallback each place a wire is first read |
+
+```tsx
+import { usePreload, useTypeWire } from "@typewirets/react";
+
+function ReportsRoute() {
+  // Suspends once, until both are created (in parallel)
+  usePreload({ wires: [ReportsServiceWire, ChartsWire] });
+  return <ReportsPage />;
+}
+
+function ReportsPage() {
+  const reports = useTypeWire(ReportsServiceWire); // already created: no suspend
+  return <ReportList reports={reports} />;
+}
+
+<Suspense fallback={<div>Loading reports...</div>}>
+  <ReportsRoute />
+</Suspense>
+```
+
+`usePreload` skips wires that aren't singletons, works with any resolution context (including the Inversify adapter), and sends a failed creation to the nearest error boundary.
+
+### Catching a forgotten preload
+
+If your app preloads every phase and should never show a fallback, pass `{ suspend: false }`. A wire that isn't created yet then throws a `TypeWireError` with reason `NotPreloaded`, naming the wire, instead of suspending:
+
+```tsx
+const userStore = useTypeWire(UserStoreWire, { suspend: false });
+```
+
+Preloaded values render as they are, including `0`, `""`, `false` and `null`.
+
 ## Handling Async TypeWires
 
-When using TypeWires with async initialization, React Suspense handles the loading state:
+A wire nobody preloaded still works: React Suspense handles the loading state:
 
 ```tsx
 // Component that depends on an async TypeWire
@@ -219,6 +264,7 @@ function App() {
 
 - **ResolutionContextProvider**: Provides TypeWire container to React components
 - **useTypeWire**: Hook to access TypeWire instances in components
+- **usePreload**: Hook that suspends a subtree once, until a set of wires is created
 - **useContainer**: Direct access to the ResolutionContext (advanced use cases)
 
 ## Best Practices
@@ -226,6 +272,7 @@ function App() {
 1. **Initialize TypeWires in a main function**:
    - Group your TypeWires with `typeWireGroupOf`
    - Apply them all at once before rendering
+   - Preload what the first screen needs with `container.preload({ wires })`; preload later phases with `usePreload`
 
 2. **Use state management libraries with TypeWire**:
    - Zustand, Redux, or MobX work well with TypeWire
