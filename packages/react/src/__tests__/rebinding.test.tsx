@@ -76,6 +76,25 @@ describe("ReactResolutionContext after unbind and re-apply", () => {
     expect((await after).label).toBe("new");
   });
 
+  it("a failure that settles after clearErrors is not cached", async () => {
+    const container = new TypeWireContainer();
+    let failOld: (err: Error) => void = () => {};
+    const oldCreation = new Promise<Connection>((_, reject) => {
+      failOld = reject;
+    });
+    await connectionWire(() => oldCreation).apply(container);
+    const context = new ReactResolutionContext(container);
+
+    const before = context.get(ConnectionSymbol);
+    await container.unbind(ConnectionSymbol);
+    await connectionWire(async () => ({ label: "new" })).apply(container);
+    context.clearErrors(ConnectionSymbol);
+    failOld(new Error("old connection refused"));
+
+    await expect(before).rejects.toThrow("old connection refused");
+    expect((await context.get(ConnectionSymbol)).label).toBe("new");
+  });
+
   it("a component mounted after the re-apply shows the new value, not the pending old creation", async () => {
     const container = new TypeWireContainer();
     const old = deferred<Connection>();
@@ -158,18 +177,77 @@ describe("a failing async wire read through useTypeWire", () => {
     expect(created).toBe(1);
   });
 
-  it("shows the new binding's value once the provider re-renders after unbind and re-apply", async () => {
+  it("is not created again when the provider re-renders and the boundary resets", async () => {
+    let created = 0;
+    const FailingWire = connectionWire(async () => {
+      created += 1;
+      throw new Error("connection refused");
+    });
     const container = new TypeWireContainer();
+    await FailingWire.apply(container);
+
+    // `attempt` keys the error boundary, so bumping it re-renders the provider
+    // and remounts the reader.
+    function App(props: { attempt: number }) {
+      return (
+        <ResolutionContextProvider resolutionContext={container}>
+          <ErrorBoundary key={props.attempt}>
+            <Suspense fallback={<div>loading</div>}>
+              <Reader wire={FailingWire} testId="value" />
+            </Suspense>
+          </ErrorBoundary>
+        </ResolutionContextProvider>
+      );
+    }
+
+    const { rerender } = render(<App attempt={1} />);
+    await screen.findByTestId("error");
+    rerender(<App attempt={2} />);
+
+    expect((await screen.findByTestId("error")).textContent).toBe(
+      "Error: connection refused",
+    );
+    expect(created).toBe(1);
+  });
+
+  it("is created once when the Suspense boundary sits above the provider", async () => {
+    let created = 0;
+    const FailingWire = connectionWire(async () => {
+      created += 1;
+      throw new Error("connection refused");
+    });
+    const container = new TypeWireContainer();
+    await FailingWire.apply(container);
+
+    render(
+      <ErrorBoundary>
+        <Suspense fallback={<div>loading</div>}>
+          <ResolutionContextProvider resolutionContext={container}>
+            <Reader wire={FailingWire} testId="value" />
+          </ResolutionContextProvider>
+        </Suspense>
+      </ErrorBoundary>,
+    );
+
+    expect((await screen.findByTestId("error")).textContent).toBe(
+      "Error: connection refused",
+    );
+    await act(() => new Promise((r) => setTimeout(r, 500)));
+    expect(created).toBe(1);
+  });
+
+  it("shows the new binding's value after unbind, re-apply and clearErrors", async () => {
+    const container = new TypeWireContainer();
+    const resolution = new ReactResolutionContext(container);
     const FailingWire = connectionWire(async () => {
       throw new Error("connection refused");
     });
     const WorkingWire = connectionWire(async () => ({ label: "new" }));
     await FailingWire.apply(container);
 
-    // `attempt` keys the error boundary, so bumping it also resets the boundary.
     function App(props: { attempt: number }) {
       return (
-        <ResolutionContextProvider resolutionContext={container}>
+        <ResolutionContextProvider resolutionContext={resolution}>
           <ErrorBoundary key={props.attempt}>
             <Suspense fallback={<div>loading</div>}>
               <Reader wire={WorkingWire} testId="value" />
@@ -184,6 +262,7 @@ describe("a failing async wire read through useTypeWire", () => {
 
     await container.unbind(ConnectionSymbol);
     await WorkingWire.apply(container);
+    resolution.clearErrors(ConnectionSymbol);
     rerender(<App attempt={2} />);
 
     expect((await screen.findByTestId("value")).textContent).toBe("new");
