@@ -36,6 +36,15 @@ Framework packages should declare the framework as a **`peerDependency`** with a
 | Shared config (`@typewirets/typescript-config`) | `devDependencies` | Build-time only |
 | External containers/frameworks | `peerDependencies` | Let consumers control versions |
 
+## Release Checklist
+
+`@typewirets/core`, `@typewirets/react` and `@typewirets/inversify` are released together, with the same version number, even when only one of them changed. The adapters depend on core through `workspace:*`, which `pnpm publish` turns into an exact version pin. An adapter released on its own keeps pinning the old core, and a project that installs it next to a newer core gets two copies of core, or an adapter written against a different `BindingContext` contract. For example, `@typewirets/inversify` 0.1.0 with `@typewirets/core` 0.1.1 adds a second Inversify binding when a wire is re-applied, because neither side unbinds.
+
+1. Move each package's `## Unreleased` changelog entries under a heading for the new version. Every package gets a heading, even with only "Depends on `@typewirets/core` X.Y.Z." under it.
+2. `package.json` versions stay at `0.0.0` in the repository. Set the same version on all three packages at release time, so `workspace:*` becomes that version in the published adapters.
+3. Run `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm build`, `pnpm check-types` and `pnpm test`.
+4. Publish all three packages from the same commit.
+
 ## Package Metadata Checklist
 
 Every publishable package (`packages/core`, `packages/inversify`, `packages/react`) should include:

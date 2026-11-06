@@ -156,6 +156,12 @@ await loggerWire.apply(adapter);  // Note the await
 const logger = loggerWire.getInstance(adapter);
 ```
 
+## Re-applying a Wire
+
+Re-applying a wire for a type that is already bound replaces its Inversify binding, and Inversify discards the cached instance with it. A singleton that was already resolved is built again on the next resolve, from the new wire's creator (for example after `wire.withCreator(...).apply(adapter)`). Caching is Inversify's job here. This differs from `TypeWireContainer` in `@typewirets/core`, which keeps a cached singleton when the wire is re-applied.
+
+Always `await` `apply` (and `bind`). Inversify 7 only unbinds asynchronously, so when the type is already bound, the new binding is registered only after the old one has been removed. Until then, resolving the type still returns the old binding's value.
+
 ## Scope Mapping and Behavior
 
 The adapter automatically maps TypeWire scopes to Inversify binding scopes:

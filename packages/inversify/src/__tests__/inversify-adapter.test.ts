@@ -195,4 +195,47 @@ describe("Inversify Adapter", () => {
     const logger2 = await iLoggerWire.getInstance(inversifyAdapter);
     expect(logger2.isDebug).toBe(false);
   });
+
+  // Unlike @typewirets/core's TypeWireContainer, which keeps a cached
+  // singleton when a wire is re-applied, the adapter replaces the Inversify
+  // binding, and Inversify drops the cached instance with it.
+  describe("re-applying a singleton after it was resolved", () => {
+    test("an override builds a fresh value from the new creator", async () => {
+      const configWire = typeWireOf({
+        token: "Config",
+        creator: () => ({ source: "original" }),
+      });
+
+      await configWire.apply(inversifyAdapter);
+      const before = await configWire.getInstance(inversifyAdapter);
+      expect(before.source).toBe("original");
+
+      await configWire
+        .withCreator(() => ({ source: "override" }))
+        .apply(inversifyAdapter);
+
+      const after = await configWire.getInstance(inversifyAdapter);
+      expect(after.source).toBe("override");
+      expect(after).not.toBe(before);
+      expect(configWire.getInstanceSync(inversifyAdapter)).toBe(after);
+    });
+
+    test("re-applying the same wire runs its creator again", async () => {
+      let builds = 0;
+      const counterWire = typeWireOf({
+        token: "Counter",
+        creator: () => ({ build: ++builds }),
+      });
+
+      await counterWire.apply(inversifyAdapter);
+      const before = await counterWire.getInstance(inversifyAdapter);
+      expect(before.build).toBe(1);
+
+      await counterWire.apply(inversifyAdapter);
+
+      const after = await counterWire.getInstance(inversifyAdapter);
+      expect(after.build).toBe(2);
+      expect(after).not.toBe(before);
+    });
+  });
 });

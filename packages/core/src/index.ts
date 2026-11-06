@@ -497,7 +497,9 @@ export class StandardTypeWire<T> implements TypeWire<T> {
    * wire for a token that is already bound replaces the binding but keeps any
    * value already created (or being created) for that token, so the new
    * binding only takes effect for values not yet created in that container.
-   * Call `unbind` first to discard the cached value.
+   * Call `unbind` first to discard the cached value. An override that changes
+   * the scope (for example singleton to transient) does not reuse the cached
+   * value, because resolution follows the new binding's scope.
    *
    * @param binder The dependency binder to register with
    * @returns A promise that resolves when registration is complete

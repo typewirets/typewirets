@@ -122,10 +122,23 @@ export class InversifyAdapter
 
   /**
    * Binds a TypeWire to the InversifyJS container, replacing any existing
-   * binding for the same type (which also discards its cached instance).
-   * Configures the binding with the appropriate scope and creator function.
+   * binding for the same type. Configures the binding with the appropriate
+   * scope and creator function.
+   *
+   * Replacing a binding discards Inversify's cached instance, so re-applying a
+   * singleton wire after it was resolved (for example
+   * `wire.withCreator(...).apply(adapter)`) builds a fresh value on the next
+   * resolve. Caching is Inversify's job here. This differs from
+   * `TypeWireContainer` in `@typewirets/core`, which keeps the cached value.
+   *
+   * Always await `bind` (or `wire.apply(adapter)`). When the type is already
+   * bound, the old binding is removed with Inversify's asynchronous
+   * `container.unbind` (Inversify 7 has no synchronous unbind) and the new
+   * binding is registered only after that resolves. Until then, resolving the
+   * type still returns the old binding's value.
    *
    * @param typeWire - The TypeWire to bind
+   * @returns A promise that resolves once the new binding is registered
    */
   async bind(typeWire: AnyTypeWire): Promise<void> {
     if (this.isBound(typeWire.type)) {
