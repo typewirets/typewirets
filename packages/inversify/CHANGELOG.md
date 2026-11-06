@@ -3,6 +3,9 @@
 ## Unreleased
 
 - **Node.js 22 or later is required.** `engines.node` is now `>=22`, because Node.js 20 reached end-of-life on 30 April 2026. CI tests Node.js 22, 24 and 26.
+- **Re-applying a wire after it was resolved builds a fresh value, by design.** The adapter replaces the Inversify binding, and Inversify discards its cached instance, so caching stays Inversify's job. `@typewirets/core`'s `TypeWireContainer` keeps the cached value instead. The README and `bind`'s TSDoc now say so, and a test pins it.
+- **Always `await` `bind` and `apply`.** Inversify 7 has no synchronous unbind, so on an already-bound type the new binding is registered only after the old one is removed. Until then, resolving the type returns the old binding's value.
+- Release this adapter together with `@typewirets/core` and `@typewirets/react`. It pins core exactly, so an adapter released on its own can be installed next to a core whose `BindingContext` contract it does not match. See the release checklist in `MAINTAINING.md`.
 
 ## 0.1.1
 
