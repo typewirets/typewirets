@@ -59,7 +59,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
 <main>
   <header>
     <h1>Resolve createWith imports sync-first inside the core container, on top of #20's per-step chains</h1>
-    <div class="meta"><span>Key: sync-createwith</span><span>Date: <time datetime="2026-11-05">2026-11-05</time></span><span>Author: Claude Code (Opus 5.5)</span><span>Status: awaiting a pick</span><span>Serves: product.html B1–B8</span></div>
+    <div class="meta"><span>Key: sync-createwith</span><span>Date: <time datetime="2026-11-05">2026-11-05</time></span><span>Author: Claude Code (Opus 5.5)</span><span>Status: A1 picked 2026-11-06</span><span>Serves: product.html B1–B8</span></div>
   </header>
 
   <p class="takeaway">Recommended: A1. The container tries each import synchronously, runs it only once, and finishes asynchronously from the first import that turns out async. It needs #20's per-step resolution chain first: on today's shared cycle-detection stack, mixing sync and async reads corrupts the stack (measured below).</p>
