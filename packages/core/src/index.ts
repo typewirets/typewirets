@@ -1267,6 +1267,13 @@ class ResolutionState {
    * Registers a new resolution promise and sets up handlers to update the singleton cache.
    * This method ensures that singleton instances are properly cached once resolved
    * and that in-progress resolutions are tracked.
+   *
+   * A resolution only touches the cache while it is still the current one for its
+   * symbol. If the symbol was unbound while it was in flight, its value goes to
+   * its own callers but is never cached, and it never removes a newer resolution.
+   * The first value cached for a binding is kept: nothing else writes the cache
+   * while a current resolution is in flight, because `get` and `getSync` both
+   * check for one before creating.
    * @template T The type of the instance being resolved
    * @param typeSymbol The type symbol being resolved
    * @param created The promise that will resolve to the instance
@@ -1276,16 +1283,24 @@ class ResolutionState {
     typeSymbol: TypeSymbol<T>,
     created: Promise<T>,
   ): Promise<T> {
-    const updated = created
+    const symbol = typeSymbol.symbol;
+    // Reads `updated` before its declaration below. That is safe: `isCurrent` is
+    // only called from the `then`/`finally` callbacks, which always run later.
+    const isCurrent = () => this.resolutions.get(symbol) === updated;
+    const updated: Promise<T> = created
       .then((value) => {
-        this.singletons.set(typeSymbol.symbol, value);
+        if (isCurrent()) {
+          this.singletons.set(symbol, value);
+        }
         return value;
       })
       .finally(() => {
-        this.resolutions.delete(typeSymbol.symbol);
+        if (isCurrent()) {
+          this.resolutions.delete(symbol);
+        }
       });
 
-    this.resolutions.set(typeSymbol.symbol, updated);
+    this.resolutions.set(symbol, updated);
     return updated;
   }
 
@@ -1299,6 +1314,16 @@ class ResolutionState {
   registerSingleton<T>(typeSymbol: TypeSymbol<T>, result: T) {
     this.singletons.set(typeSymbol.symbol, result);
   }
+}
+
+/**
+ * The error `getSync` throws for a singleton whose value is being created
+ * asynchronously. It is retriable: once the value is cached, `getSync` succeeds.
+ */
+function singletonNotReady(): TypeWireError {
+  const err = TypeWireError.asyncBindingOnly();
+  err.retriable = true;
+  return err;
 }
 
 /**
@@ -1374,6 +1399,11 @@ class ScopedResolutionContext implements ResolutionContext {
    * @returns An instance of type T
    * @throws Error if the dependency is not found, if the creator is asynchronous,
    *         or if a circular dependency is detected
+   * @throws {TypeWireError} with reason `AsyncOnlyBinding` while a singleton's value
+   *         is still being created, even if the binding now in place has a
+   *         synchronous creator (for example, after a re-apply). The creator is not
+   *         run again. The error is `retriable`: retry once the value is cached, or
+   *         use `get`.
    */
   getSync<T>(typeSymbol: TypeSymbol<T>): T {
     return this.resolutionRequestMonitor.monitor(typeSymbol, () => {
@@ -1386,10 +1416,21 @@ class ScopedResolutionContext implements ResolutionContext {
           return this.resolutionState.getSingletonValue(typeSymbol) as T;
         }
 
+        // getSync cannot wait for a creation already in flight, and must not
+        // start a second one: tell the caller to retry later or use `get`.
+        if (this.resolutionState.getRunningResolver(typeSymbol)) {
+          throw singletonNotReady();
+        }
+
         const result = creator(this);
         if (isPromise(result)) {
-          this.resolutionState.registerResolution(typeSymbol, result);
-          throw TypeWireError.asyncBindingOnly();
+          // No caller here awaits this creation. A later `get` joins it and
+          // receives any failure; without one, the failure must not surface as
+          // an unhandled rejection (which ends a Node process by default).
+          this.resolutionState
+            .registerResolution(typeSymbol, result)
+            .catch(() => {});
+          throw singletonNotReady();
         }
 
         this.resolutionState.registerSingleton(typeSymbol, result);
