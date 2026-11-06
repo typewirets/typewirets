@@ -43,7 +43,9 @@ Framework packages should declare the framework as a **`peerDependency`** with a
 1. Move each package's `## Unreleased` changelog entries under a heading for the new version. Every package gets a heading, even with only "Depends on `@typewirets/core` X.Y.Z." under it.
 2. `package.json` versions stay at `0.0.0` in the repository. Set the same version on all three packages at release time, so `workspace:*` becomes that version in the published adapters.
 3. Run `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm build`, `pnpm check-types` and `pnpm test`.
-4. Publish all three packages from the same commit.
+4. Publish all three packages from the same commit with `pnpm publish`, never `npm publish` from a package folder. Only pnpm rewrites `workspace:*` into the release version, so `npm publish` would ship adapters that depend on `"@typewirets/core": "workspace:*"`, which can't be installed.
+
+When the **Publish to npm** workflow lands, it replaces steps 2 to 4. It sets the versions, packs the packages with `pnpm pack` and stages them on npm, so follow its "Releasing" section instead. Every package still gets a changelog heading (step 1), and the packages still ship together.
 
 ## Package Metadata Checklist
 
