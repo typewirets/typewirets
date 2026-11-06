@@ -14,6 +14,9 @@ Make a `createWith` wire whose imports are all synchronous resolve synchronously
 
 - 2026-11-06: person pointed out that runtime detection loses the type-safe dependency chain, and asked for pros, cons and risks of each side. [options.html](options.html) compares O0–O3; the A1 pick is on hold until they choose.
 
+- 2026-11-06: person's context: createWith was made always async on purpose, because a creator override (`withCreator`) may need to be sync or async depending on what the constructor needs; what matters is delivering the instance. They asked to reassess at the requirement level: is sync vs async part of a wire's definition, or an implementation detail of whatever creator is bound?
+- Finding: O3's compile-time proof does not survive overrides. `withCreator` keeps the token and `CreatorDecorator<T>` may return a promise, so an importer typed "all imports sync" can meet an async override at runtime.
+
 ## Next steps
 
 1. Issue #20 (per-step chains, wait-for cycle check) as its own PR, per the triage plan (docs/projects/issue-triage-2026-11/plan.html, P3a–P3d).
