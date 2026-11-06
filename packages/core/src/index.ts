@@ -1271,7 +1271,9 @@ class ResolutionState {
    * A resolution only touches the cache while it is still the current one for its
    * symbol. If the symbol was unbound while it was in flight, its value goes to
    * its own callers but is never cached, and it never removes a newer resolution.
-   * The first value cached for a binding is kept.
+   * The first value cached for a binding is kept: nothing else writes the cache
+   * while a current resolution is in flight, because `get` and `getSync` both
+   * check for one before creating.
    * @template T The type of the instance being resolved
    * @param typeSymbol The type symbol being resolved
    * @param created The promise that will resolve to the instance
@@ -1282,10 +1284,12 @@ class ResolutionState {
     created: Promise<T>,
   ): Promise<T> {
     const symbol = typeSymbol.symbol;
+    // Reads `updated` before its declaration below. That is safe: `isCurrent` is
+    // only called from the `then`/`finally` callbacks, which always run later.
     const isCurrent = () => this.resolutions.get(symbol) === updated;
     const updated: Promise<T> = created
       .then((value) => {
-        if (isCurrent() && !this.singletons.has(symbol)) {
+        if (isCurrent()) {
           this.singletons.set(symbol, value);
         }
         return value;
@@ -1385,6 +1389,10 @@ class ScopedResolutionContext implements ResolutionContext {
    * @returns An instance of type T
    * @throws Error if the dependency is not found, if the creator is asynchronous,
    *         or if a circular dependency is detected
+   * @throws {TypeWireError} with reason `AsyncOnlyBinding` while a singleton's value
+   *         is still being created, even if the binding now in place has a
+   *         synchronous creator (for example, after a re-apply). The creator is not
+   *         run again; retry once the value is cached, or use `get`.
    */
   getSync<T>(typeSymbol: TypeSymbol<T>): T {
     return this.resolutionRequestMonitor.monitor(typeSymbol, () => {
