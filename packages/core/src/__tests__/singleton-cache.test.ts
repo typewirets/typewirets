@@ -279,6 +279,85 @@ describe("singleton cache", () => {
       expect(wire.getInstanceSync(container)).toBe(value);
     });
 
+    it("marks the in-flight error retriable on container.getSync too", async () => {
+      const gate = deferred();
+      const wire = typeWireOf({
+        token: "t.Slow",
+        creator: async () => {
+          await gate.promise;
+          return { ready: true };
+        },
+      });
+      const container = new TypeWireContainer();
+      await wire.apply(container);
+
+      // The first read starts the creation; the second finds it in flight.
+      const starting = catchSync(() => container.getSync(wire.type));
+      const inFlight = catchSync(() => container.getSync(wire.type));
+      for (const err of [starting, inFlight]) {
+        expect((err as TypeWireError).reason).toBe("AsyncOnlyBinding");
+        expect((err as TypeWireError).retriable).toBe(true);
+      }
+
+      gate.resolve();
+      expect(await wire.getInstance(container)).toEqual({ ready: true });
+    });
+
+    describe("a creation started by getSync that fails", () => {
+      async function expectNoUnhandledRejection(run: () => Promise<void>) {
+        const unhandled: unknown[] = [];
+        const onUnhandled = (reason: unknown) => unhandled.push(reason);
+        process.on("unhandledRejection", onUnhandled);
+        try {
+          await run();
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        } finally {
+          process.off("unhandledRejection", onUnhandled);
+        }
+        expect(unhandled).toEqual([]);
+      }
+
+      it("does not leave an unhandled rejection, and get reports the error", async () => {
+        await expectNoUnhandledRejection(async () => {
+          const gate = deferred();
+          const wire = typeWireOf({
+            token: "t.Failing",
+            creator: async () => {
+              await gate.promise;
+              return { ok: true };
+            },
+          });
+          const container = new TypeWireContainer();
+          await wire.apply(container);
+
+          catchSync(() => wire.getInstanceSync(container));
+          const joined = wire.getInstance(container);
+          gate.reject(new Error("boom"));
+
+          await expect(joined).rejects.toThrow("boom");
+        });
+      });
+
+      it("does not leave an unhandled rejection when nobody asks again", async () => {
+        await expectNoUnhandledRejection(async () => {
+          const gate = deferred();
+          const wire = typeWireOf({
+            token: "t.Failing",
+            creator: async () => {
+              await gate.promise;
+              return { ok: true };
+            },
+          });
+          const container = new TypeWireContainer();
+          await wire.apply(container);
+
+          catchSync(() => wire.getInstanceSync(container));
+          await container.unbind(wire.type);
+          gate.reject(new Error("boom"));
+        });
+      });
+    });
+
     describe("a creation started before unbind", () => {
       // The first creation waits on `gate`; later ones wait on `freshGate`,
       // which is open unless a test holds it.

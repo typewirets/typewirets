@@ -1317,6 +1317,16 @@ class ResolutionState {
 }
 
 /**
+ * The error `getSync` throws for a singleton whose value is being created
+ * asynchronously. It is retriable: once the value is cached, `getSync` succeeds.
+ */
+function singletonNotReady(): TypeWireError {
+  const err = TypeWireError.asyncBindingOnly();
+  err.retriable = true;
+  return err;
+}
+
+/**
  * Provides an isolated resolution context for a single dependency resolution chain.
  *
  * Each resolution operation (get/getSync) in the container creates a fresh instance
@@ -1392,7 +1402,8 @@ class ScopedResolutionContext implements ResolutionContext {
    * @throws {TypeWireError} with reason `AsyncOnlyBinding` while a singleton's value
    *         is still being created, even if the binding now in place has a
    *         synchronous creator (for example, after a re-apply). The creator is not
-   *         run again; retry once the value is cached, or use `get`.
+   *         run again. The error is `retriable`: retry once the value is cached, or
+   *         use `get`.
    */
   getSync<T>(typeSymbol: TypeSymbol<T>): T {
     return this.resolutionRequestMonitor.monitor(typeSymbol, () => {
@@ -1405,15 +1416,21 @@ class ScopedResolutionContext implements ResolutionContext {
           return this.resolutionState.getSingletonValue(typeSymbol) as T;
         }
 
-        // A creation is already in flight: wait for it instead of starting another.
+        // getSync cannot wait for a creation already in flight, and must not
+        // start a second one: tell the caller to retry later or use `get`.
         if (this.resolutionState.getRunningResolver(typeSymbol)) {
-          throw TypeWireError.asyncBindingOnly();
+          throw singletonNotReady();
         }
 
         const result = creator(this);
         if (isPromise(result)) {
-          this.resolutionState.registerResolution(typeSymbol, result);
-          throw TypeWireError.asyncBindingOnly();
+          // No caller here awaits this creation. A later `get` joins it and
+          // receives any failure; without one, the failure must not surface as
+          // an unhandled rejection (which ends a Node process by default).
+          this.resolutionState
+            .registerResolution(typeSymbol, result)
+            .catch(() => {});
+          throw singletonNotReady();
         }
 
         this.resolutionState.registerSingleton(typeSymbol, result);
