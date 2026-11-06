@@ -59,7 +59,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
 <main>
   <header>
     <h1>Make "sync" part of a wire's type, so the compiler proves the chain, rather than detecting it at run time</h1>
-    <div class="meta"><span>Key: sync-createwith</span><span>Date: <time datetime="2026-11-06">2026-11-06</time></span><span>Author: Claude Code (Opus 5.5)</span><span>Status: awaiting a pick; replaces the A1 pick in design.html until decided</span><span>Source: two spikes on main a9dc4ac, TS 5.8.2</span></div>
+    <div class="meta"><span>Key: sync-createwith</span><span>Date: <time datetime="2026-11-06">2026-11-06</time></span><span>Author: Claude Code (Opus 5.5)</span><span>Status: superseded 2026-11-06: async stays the contract (see README.md)</span><span>Source: two spikes on main a9dc4ac, TS 5.8.2</span></div>
   </header>
 
   <p class="takeaway">Runtime detection (A1) works, but it hides whether a wire is sync: a change three imports down silently turns a working sync read into a runtime error, and the types never say so. Making sync-ness part of the wire's type keeps the dependency chain type-safe. Recommended: O3, explicit sync wires that the compiler checks.</p>
