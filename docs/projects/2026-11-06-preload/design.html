@@ -156,7 +156,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
   <section id="risks">
     <h2>Risks</h2>
     <ul>
-      <li id="K1"><b>K1.</b> Until #20 lands on main, a real cycle preloaded in parallel hangs. Mitigation: S1's release gate; changelog note if released alone is not an option.</li>
+      <li id="K1"><b>K1.</b> Until #20 lands on main, a real cycle preloaded in parallel hangs. Mitigation: S1's release gate: 0.2.0 does not ship without #20.</li>
       <li id="K2"><b>K2.</b> <code>usePreload</code> retry loops: if a preload fails, re-suspending forever is the trap. Rely on F4's error cache and test it (T7b). Timebox: half a day.</li>
       <li id="K3"><b>K3.</b> StrictMode double render must not start a second creation; core's in-flight sharing (#28) covers it. Test it (T7).</li>
     </ul>
