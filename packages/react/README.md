@@ -176,6 +176,45 @@ function App({ container }) {
 }
 ```
 
+### When a resolution fails
+
+If an async TypeWire fails, `useTypeWire` throws the error to the nearest error boundary. The error is cached, so React's Suspense retries don't start the creation again and again. Re-rendering or remounting `ResolutionContextProvider` keeps the cache: the provider uses one `ReactResolutionContext` per container.
+
+The cache can't tell that a binding was replaced, so a cached error lasts until you clear it, even after `unbind` and a re-apply. To retry, create the `ReactResolutionContext` yourself, then clear its errors after replacing the binding and reset the error boundary:
+
+```tsx
+import { ReactResolutionContext, ResolutionContextProvider } from "@typewirets/react";
+
+const resolution = new ReactResolutionContext(container);
+
+function App() {
+  const [attempt, setAttempt] = useState(0);
+
+  async function retry() {
+    await container.unbind(UserStoreWire.type);
+    await UserStoreWire.apply(container);
+    resolution.clearErrors(UserStoreWire.type);
+    setAttempt((n) => n + 1); // a new key resets the error boundary
+  }
+
+  return (
+    <ResolutionContextProvider resolutionContext={resolution}>
+      <ErrorBoundary key={attempt} fallback={<button onClick={retry}>Retry</button>}>
+        <Suspense fallback={<div>Loading dashboard...</div>}>
+          <UserDashboard />
+        </Suspense>
+      </ErrorBoundary>
+    </ResolutionContextProvider>
+  );
+}
+```
+
+`ErrorBoundary` stands for any error boundary component. `clearErrors()` with no argument clears every cached error.
+
+### Custom resolution contexts
+
+`ResolutionContextProvider` accepts any `ResolutionContext`. It doesn't merge concurrent requests itself, so the context must share one in-flight creation per singleton, or components may get different instances. `TypeWireContainer` and the `@typewirets/inversify` adapter both do.
+
 ## Core Components
 
 - **ResolutionContextProvider**: Provides TypeWire container to React components

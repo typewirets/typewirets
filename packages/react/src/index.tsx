@@ -5,7 +5,7 @@
  * context-based dependency resolution within React component trees.
  *
  * Key exports:
- * - {@link ReactResolutionContext} — Wraps a `ResolutionContext` with promise deduplication and error caching for React's concurrent rendering model
+ * - {@link ReactResolutionContext} — Wraps a `ResolutionContext` with error caching, so a failed resolution doesn't loop under Suspense
  * - {@link ContainerContext} — React Context holding the active resolution context
  * - {@link useContainer} — Hook to access the current resolution context
  * - {@link useTypeWire} — Hook to resolve a TypeWire with React Suspense support
@@ -16,6 +16,7 @@
 
 import * as React from "react";
 import {
+  type AnyTypeSymbol,
   type ResolutionContext,
   type TypeSymbol,
   type TypeWire,
@@ -24,28 +25,49 @@ import {
 } from "@typewirets/core";
 
 /**
- * A React-aware wrapper around {@link ResolutionContext} that adds promise
- * deduplication and error caching.
+ * A React-aware wrapper around {@link ResolutionContext} that caches resolution
+ * errors.
  *
- * React's concurrent rendering may call the same resolution multiple times
- * during a single render cycle. This class ensures that concurrent calls
- * for the same `TypeSymbol` share a single in-flight promise rather than
- * triggering duplicate resolutions. Once a resolution fails, the error is
- * cached so that subsequent calls throw immediately without retrying.
+ * When a component suspends on a resolution that then fails, React renders it
+ * again, and that render would start a new creation, suspend, fail and repeat
+ * forever. To stop that loop, the error from a failed `get` is cached, and
+ * later `get` and `getSync` calls for the same `TypeSymbol` throw it without
+ * calling the underlying context.
+ *
+ * A cached error lasts until {@link ReactResolutionContext.clearErrors} is
+ * called, even across `unbind` and a re-apply: this class only sees a
+ * `ResolutionContext`, so it cannot tell that a binding changed. To retry
+ * after replacing a binding, call `clearErrors` and then reset the error
+ * boundary that caught the error.
+ *
+ * Calls that run while a resolution is in flight are not deduplicated here.
+ * The underlying context must share one in-flight creation per singleton
+ * itself, or readers may get different instances. `TypeWireContainer` does,
+ * and never hands a creation started before `unbind` to new callers. So does
+ * the `@typewirets/inversify` adapter, because Inversify 7 shares concurrent
+ * singleton `getAsync` calls. A custom `ResolutionContext` must do the same.
  *
  * @example
  * ```typescript
- * const context = new ReactResolutionContext(new TypeWireContainer());
+ * const container = new TypeWireContainer();
+ * const context = new ReactResolutionContext(container);
  * const value = await context.get(MySymbol);
+ *
+ * // After replacing the binding for MySymbol:
+ * context.clearErrors(MySymbol);
  * ```
  */
 export class ReactResolutionContext {
   /** The underlying resolution context that performs actual dependency resolution. */
   readonly #resolutionContext: ResolutionContext;
-  /** In-flight resolution promises, keyed by symbol, for deduplication. */
-  readonly #resolutions: Map<symbol, Promise<unknown>> = new Map();
   /** Cached resolution errors, keyed by symbol, to fail fast on repeated access. */
   readonly #resolutionErrors: Map<symbol, unknown> = new Map();
+  /** Counts `clearErrors` calls, so a `get` can tell if one ran while it waited. */
+  #generation = 0;
+  /** The generation of the last `clearErrors()` call that cleared every symbol. */
+  #allClearedAt = 0;
+  /** The generation of the last `clearErrors(typeSymbol)` call, per symbol. */
+  readonly #clearedAt: Map<symbol, number> = new Map();
 
   constructor(resolutionContext: ResolutionContext) {
     this.#resolutionContext = resolutionContext;
@@ -68,12 +90,11 @@ export class ReactResolutionContext {
   }
 
   /**
-   * Asynchronously resolves an instance for the given type symbol, with
-   * promise deduplication.
+   * Asynchronously resolves an instance for the given type symbol.
    *
-   * If a resolution for the same symbol is already in flight, the existing
-   * promise is returned instead of starting a new one. If a previous
-   * resolution failed, the cached error is thrown immediately.
+   * If a previous resolution for this symbol failed, the cached error is
+   * thrown immediately. Otherwise the call goes to the underlying context,
+   * which joins a creation already in flight for a singleton.
    *
    * @template T The type of the resolved instance
    * @param typeSymbol - The typed symbol identifying the dependency to resolve
@@ -81,26 +102,79 @@ export class ReactResolutionContext {
    * @throws Re-throws the cached error if a previous resolution for this symbol failed
    */
   async get<T>(typeSymbol: TypeSymbol<T>): Promise<T> {
-    if (this.#resolutionErrors.has(typeSymbol.symbol)) {
-      throw this.#resolutionErrors.get(typeSymbol.symbol);
+    const symbol = typeSymbol.symbol;
+    if (this.#resolutionErrors.has(symbol)) {
+      throw this.#resolutionErrors.get(symbol);
     }
 
-    const promise = this.#resolutions.get(typeSymbol.symbol) as Promise<T>;
-    if (promise) {
-      return promise;
+    const startedAt = this.#generation;
+    try {
+      return await this.#resolutionContext.get(typeSymbol);
+    } catch (err: unknown) {
+      // A failure that settles after `clearErrors` belongs to the attempt the
+      // caller just discarded: hand it to this caller, but don't cache it.
+      if (!this.#clearedSince(symbol, startedAt)) {
+        this.#resolutionErrors.set(symbol, err);
+      }
+      throw err;
     }
-
-    const newResolution = this.#resolutionContext.get(typeSymbol);
-    this.#resolutions.set(typeSymbol.symbol, newResolution);
-    return newResolution
-      .catch((err) => {
-        this.#resolutionErrors.set(typeSymbol.symbol, err);
-        throw err;
-      })
-      .finally(() => {
-        this.#resolutions.delete(typeSymbol.symbol);
-      });
   }
+
+  /**
+   * Forgets cached resolution errors, so the next `get` or `getSync` asks the
+   * underlying context again.
+   *
+   * Call it after replacing a failed binding (`unbind`, then apply the wire
+   * again), then reset the error boundary that shows the error. A failure that
+   * was still in flight when you call this is not cached when it settles.
+   *
+   * @param typeSymbol - The symbol whose error to forget. Omit to forget all.
+   */
+  clearErrors(typeSymbol?: AnyTypeSymbol): void {
+    this.#generation += 1;
+    if (typeSymbol) {
+      this.#resolutionErrors.delete(typeSymbol.symbol);
+      this.#clearedAt.set(typeSymbol.symbol, this.#generation);
+      return;
+    }
+
+    this.#resolutionErrors.clear();
+    this.#clearedAt.clear();
+    this.#allClearedAt = this.#generation;
+  }
+
+  #clearedSince(symbol: symbol, generation: number): boolean {
+    const clearedAt = Math.max(
+      this.#allClearedAt,
+      this.#clearedAt.get(symbol) ?? 0,
+    );
+    return clearedAt > generation;
+  }
+}
+
+/**
+ * The wrapper {@link ResolutionContextProvider} uses for each plain context, so
+ * every render and every mount of a provider for that context share one error
+ * cache and one context value.
+ */
+const reactResolutionContexts = new WeakMap<
+  ResolutionContext,
+  ReactResolutionContext
+>();
+
+function reactResolutionContextFor(
+  resolutionContext: ResolutionContext,
+): ReactResolutionContext {
+  if (resolutionContext instanceof ReactResolutionContext) {
+    return resolutionContext;
+  }
+
+  let wrapper = reactResolutionContexts.get(resolutionContext);
+  if (!wrapper) {
+    wrapper = new ReactResolutionContext(resolutionContext);
+    reactResolutionContexts.set(resolutionContext, wrapper);
+  }
+  return wrapper;
 }
 
 /**
@@ -211,8 +285,18 @@ export function useTypeWire<T>(typeWire: TypeWire<T>): T {
  * React component that provides a {@link ResolutionContext} to the component tree.
  *
  * If the given `resolutionContext` is not already a {@link ReactResolutionContext},
- * it is automatically wrapped in one to enable promise deduplication and error
- * caching for React's concurrent rendering model.
+ * it is wrapped in one, so a failed resolution reaches an error boundary
+ * instead of retrying under Suspense. Each plain context gets one wrapper,
+ * reused on every render and every mount, so re-rendering the provider keeps
+ * cached errors and gives consumers the same context value.
+ *
+ * A cached error lasts until `clearErrors` is called, even after `unbind` and
+ * a re-apply. To be able to retry, create the {@link ReactResolutionContext}
+ * yourself, pass it here, and call its `clearErrors` after replacing the
+ * binding.
+ *
+ * The context must share one in-flight creation per singleton (as
+ * `TypeWireContainer` does); see {@link ReactResolutionContext}.
  *
  * @param props.resolutionContext - The resolution context to provide to descendants
  * @param props.children - Child components that will have access to the context
@@ -235,10 +319,7 @@ export function ResolutionContextProvider(props: {
   resolutionContext: ResolutionContext;
   children?: React.ReactNode;
 }) {
-  const resolutionContext =
-    props.resolutionContext instanceof ReactResolutionContext
-      ? props.resolutionContext
-      : new ReactResolutionContext(props.resolutionContext);
+  const resolutionContext = reactResolutionContextFor(props.resolutionContext);
   return (
     <ContainerContext value={resolutionContext}>
       {props.children}
