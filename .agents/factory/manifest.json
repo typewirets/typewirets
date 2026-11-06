@@ -1,0 +1,33 @@
+{
+  "source": "https://github.com/rexk/soft-factorio.git",
+  "version": "0e0fd9eeab6a",
+  "applied": "2026-11-05",
+  "files": {
+    ".agents/factory/guides/harness-settings.md": "4398abb6c79e9799e3d97ab93b5d154e108b7b3106fd7d6f55e1ed667a76154f",
+    ".agents/factory/guides/prompting-for-outcomes.md": "90a505c074cc8f65a13cc762f4ccf09e448f6acda764551363ff85b801dbbde0",
+    ".agents/factory/guides/rules-files.md": "d390449fd18161b37e93f817c101892dac73989ecd7558cd21700bc95198aedd",
+    ".agents/skills/contribute-upstream/SKILL.md": "6c7a78e8d2352ac1e6b39919b46c21764f14db93d299821edab8455f5b7ef9cf",
+    ".agents/skills/create-pr/SKILL.md": "e54d011f15c24c4677d59d492a2a966b7ce30933eaa981f5a1ffa510f8c6649a",
+    ".agents/skills/create-pr/writing-guide.md": "0fd46ce8d4409c52f2f25e3675f63f1285c46e35604f5499353b39cd170e7145",
+    ".agents/skills/html-for-humans/SKILL.md": "05d78cf9886acda628d6df80b38df2d044c7d91f070b5212003c58e11c6c19c4",
+    ".agents/skills/html-for-humans/template.html": "f97fc1dc872423f5ae37e31422f7c75183f38d1028eae3d263f560c2d755281c",
+    ".agents/skills/html-for-humans/visualization.md": "b7d2783aa6661b80c1eced63d4b29e0dafe8898d10394fd92ce455263603ff8a",
+    ".agents/skills/outcome-brief/SKILL.md": "720fac286aa1f738986cfba9716473e4e9a61fe7bdeaafdc6369ad32a8ca2d18",
+    ".agents/skills/outcome-brief/brief-sections.md": "3abcef2e18a9a5c1e7b077af390be9d94cfdfdc2dd77a8951c5ad92f66c61cf3",
+    ".agents/skills/outcome-brief/example-outcome-brief.html": "50a80515f621aba99b6a1a872e1dfc4e75b9f5278f53cde308bbb216f0ad7e37",
+    ".agents/skills/outcome-brief/questions.md": "62c843e8185a3aa5d0d5b051c04e9b1489fe2864c81075ca3bb2d59a8be38928",
+    ".agents/skills/retro/SKILL.md": "8e14069a75fd5d5a37969efa59bea949f6d74a14a5e15ebe1ecd3604405c29f4",
+    ".claude/skills/contribute-upstream/SKILL.md": "6c7a78e8d2352ac1e6b39919b46c21764f14db93d299821edab8455f5b7ef9cf",
+    ".claude/skills/create-pr/SKILL.md": "e54d011f15c24c4677d59d492a2a966b7ce30933eaa981f5a1ffa510f8c6649a",
+    ".claude/skills/create-pr/writing-guide.md": "0fd46ce8d4409c52f2f25e3675f63f1285c46e35604f5499353b39cd170e7145",
+    ".claude/skills/html-for-humans/SKILL.md": "05d78cf9886acda628d6df80b38df2d044c7d91f070b5212003c58e11c6c19c4",
+    ".claude/skills/html-for-humans/template.html": "f97fc1dc872423f5ae37e31422f7c75183f38d1028eae3d263f560c2d755281c",
+    ".claude/skills/html-for-humans/visualization.md": "b7d2783aa6661b80c1eced63d4b29e0dafe8898d10394fd92ce455263603ff8a",
+    ".claude/skills/outcome-brief/SKILL.md": "720fac286aa1f738986cfba9716473e4e9a61fe7bdeaafdc6369ad32a8ca2d18",
+    ".claude/skills/outcome-brief/brief-sections.md": "3abcef2e18a9a5c1e7b077af390be9d94cfdfdc2dd77a8951c5ad92f66c61cf3",
+    ".claude/skills/outcome-brief/example-outcome-brief.html": "50a80515f621aba99b6a1a872e1dfc4e75b9f5278f53cde308bbb216f0ad7e37",
+    ".claude/skills/outcome-brief/questions.md": "62c843e8185a3aa5d0d5b051c04e9b1489fe2864c81075ca3bb2d59a8be38928",
+    ".claude/skills/retro/SKILL.md": "8e14069a75fd5d5a37969efa59bea949f6d74a14a5e15ebe1ecd3604405c29f4",
+    "AGENTS.md#soft-factorio": "d32253753e6047264a5253306ac577b70b7e888953fa6294348699fbf71e227a"
+  }
+}
