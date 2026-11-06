@@ -12,6 +12,8 @@ Make a `createWith` wire whose imports are all synchronous resolve synchronously
 
 - 2026-11-06: person replied "Approve A1, do #20 first". #28–#31 merged.
 
+- 2026-11-06: person pointed out that runtime detection loses the type-safe dependency chain, and asked for pros, cons and risks of each side. [options.html](options.html) compares O0–O3; the A1 pick is on hold until they choose.
+
 ## Next steps
 
 1. Issue #20 (per-step chains, wait-for cycle check) as its own PR, per the triage plan (docs/projects/issue-triage-2026-11/plan.html, P3a–P3d).

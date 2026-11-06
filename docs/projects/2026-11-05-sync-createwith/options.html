@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Make "sync" part of a wire's type, so the compiler proves the chain, rather than detecting it at run time</title>
+<style>
+/* Tokens: change values here only. Light first, dark redefines the same names. */
+:root{
+  --bg:#f4f5f7; --surface:#ffffff; --fg:#1a1f27; --muted:#5d6672; --line:#d6dae0;
+  --accent:#2f5fd0; --accent-soft:#e6ecfb;
+  --ok:#1d7a46; --warn:#9a6200; --bad:#b3261e;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+/* Dark: follows the OS unless the viewer picked light; data-theme="dark" forces it. */
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 var(--sans)}
+main{max-width:720px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:28px}
+h1{font-size:1.6rem;line-height:1.2;margin:0;text-wrap:balance}
+h2{font-size:1.15rem;margin:0 0 8px}
+p{margin:0 0 8px}
+.meta{font:13px/1.4 var(--mono);color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
+.takeaway{background:var(--accent-soft);border-left:4px solid var(--accent);padding:12px 14px;border-radius:0 6px 6px 0;font-weight:600}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.8rem;font-weight:600;border:1px solid currentColor}
+.chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)}
+figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px}
+figure svg{display:block;width:100%;height:auto}
+figcaption{font-size:.9rem;color:var(--muted);margin-top:8px}
+figcaption b{color:var(--fg)}
+details{margin-top:6px} summary{cursor:pointer}
+fieldset{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:0 0 12px}
+legend{font-weight:600;padding:0 4px}
+label{display:block;padding:4px 0}
+textarea{width:100%;min-height:4.5em;font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px}
+.answer pre{white-space:pre-wrap;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.45 var(--mono)}
+button{font:inherit;font-weight:600;padding:8px 14px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);cursor:pointer}
+button:focus-visible,summary:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Make "sync" part of a wire's type, so the compiler proves the chain, rather than detecting it at run time</h1>
+    <div class="meta"><span>Key: sync-createwith</span><span>Date: <time datetime="2026-11-06">2026-11-06</time></span><span>Author: Claude Code (Opus 5.5)</span><span>Status: awaiting a pick; replaces the A1 pick in design.html until decided</span><span>Source: two spikes on main a9dc4ac, TS 5.8.2</span></div>
+  </header>
+
+  <p class="takeaway">Runtime detection (A1) works, but it hides whether a wire is sync: a change three imports down silently turns a working sync read into a runtime error, and the types never say so. Making sync-ness part of the wire's type keeps the dependency chain type-safe. Recommended: O3, explicit sync wires that the compiler checks.</p>
+
+  <section id="options">
+    <h2>The four options</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>ID</th><th>What a <code>createWith</code> wire does</th><th>Who decides it's sync</th></tr></thead>
+      <tbody>
+        <tr id="O0"><td><b>O0.</b> Keep today</td><td>Always async. Sync reads work only after a preload.</td><td>Nobody: it's never sync on first use</td></tr>
+        <tr id="O1"><td><b>O1.</b> Runtime detection (was A1)</td><td>Runs each import once; sync if none returned a promise.</td><td>The run time, after the fact</td></tr>
+        <tr id="O2"><td><b>O2.</b> Inferred types + runtime detection</td><td>O1, plus <code>typeWireOf</code> returns a <code>SyncTypeWire&lt;T&gt;</code> type whenever the compiler can see the whole chain is sync.</td><td>Compiler (visible) and run time (acts)</td></tr>
+        <tr id="O3"><td><b>O3.</b> Explicit sync wires, compiler-checked</td><td>A wire marked sync (e.g. <code>sync: true</code>) reads its imports synchronously, never awaits. The compiler rejects it if <code>createWith</code> returns a promise or any import isn't a sync wire. Unmarked wires stay as today.</td><td>The author, checked by the compiler</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="evidence">
+    <h2>What the spikes showed</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Check</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr id="E4"><td><b>E4.</b> Drift under O1: same app, only <code>Config</code> (three levels down) changed from sync to async</td><td><code>Svc.getInstanceSync</code> went from <i>value</i> to <i>AsyncOnlyBinding at runtime</i>. <code>Svc</code>'s type: unchanged. <span class="chip bad">silent</span></td></tr>
+        <tr id="E5"><td><b>E5.</b> Can TS prove a chain sync? Overloads + a <code>SyncTypeWire&lt;T&gt;</code> brand, <code>tsc --strict</code></td><td>Yes. Sync leaf → sync; <code>createWith</code> over sync imports → sync; one async import or an async <code>createWith</code> → rejected where a sync wire is required. A sync wire is still assignable to <code>TypeWire&lt;T&gt;</code>. <span class="chip ok">holds</span></td></tr>
+        <tr id="E6"><td><b>E6.</b> Escape hatch</td><td>A creator typed <code>any</code> is typed sync even if it returns a promise. Needs a clear runtime error. <span class="chip warn">gap</span></td></tr>
+        <tr id="E7"><td><b>E7.</b> O1 runtime (earlier spike)</td><td>All-sync tree read sync on first use; async import created once; transient once per resolve. Cycle paths need #20 first (E1 in design.html). <span class="chip ok">works</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="compare">
+    <h2>Pros and cons</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Criterion</th><th>O0 keep</th><th>O1 runtime</th><th>O2 inferred + runtime</th><th>O3 explicit, checked</th></tr></thead>
+      <tbody>
+        <tr><td>Chain stays type-safe (types say sync vs async)</td><td><span class="chip ok">yes</span> uniformly async</td><td><span class="chip bad">no</span> E4</td><td><span class="chip ok">yes</span> except E6</td><td><span class="chip ok">yes</span> except E6</td></tr>
+        <tr><td>Deep change to async is caught</td><td>n/a</td><td><span class="chip bad">at runtime, far away</span></td><td><span class="chip ok">compile error</span> where a sync wire is required</td><td><span class="chip ok">compile error</span> at the sync wire's imports</td></tr>
+        <tr><td><code>useTypeWire</code> skips the fallback on first mount</td><td><span class="chip bad">never</span></td><td><span class="chip ok">all sync wires</span></td><td><span class="chip ok">all sync wires</span></td><td><span class="chip warn">marked wires only</span></td></tr>
+        <tr><td>Behaviour change for existing code</td><td>none</td><td>creator may return a value; errors surface sync</td><td>as O1, plus new inferred types</td><td>none for unmarked wires</td></tr>
+        <tr><td>Needs #20 first</td><td>no</td><td><span class="chip warn">yes</span></td><td><span class="chip warn">yes</span></td><td><span class="chip ok">no</span>: sync wires never mix with async</td></tr>
+        <tr><td>Inversify adapter</td><td>same</td><td><span class="chip warn">differs from core</span> (stays async)</td><td><span class="chip warn">differs</span></td><td><span class="chip ok">same</span>: sync reads go through <code>getSync</code></td></tr>
+        <tr><td>Effort</td><td>none</td><td>M (after #20)</td><td>L</td><td>M</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="risks">
+    <h2>Risks</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Risk</th><th>Hits</th><th>Mitigation</th></tr></thead>
+      <tbody>
+        <tr id="K4"><td><b>K4.</b> Silent drift: a deep import turns async and a sync read breaks at runtime, in another module</td><td>O1</td><td>None in types; only tests that read sync.</td></tr>
+        <tr id="K5"><td><b>K5.</b> Creator contract change: a <code>createWith</code> creator returns a value, not a promise; <code>.then</code> on it in a <code>withCreator</code> decorator breaks</td><td>O1, O2</td><td>Changelog; <code>Creator</code> is already typed <code>T | Promise&lt;T&gt;</code>. O3: only for wires marked sync.</td></tr>
+        <tr id="K6"><td><b>K6.</b> Types lie (<code>any</code>, JS callers, a cast)</td><td>O2, O3</td><td>A marked-sync wire whose import turns out async throws <code>AsyncOnlyBinding</code> naming the import, instead of hanging or awaiting.</td></tr>
+        <tr id="K7"><td><b>K7.</b> Overload changes shift inferred types in user code</td><td>O2, O3</td><td><code>SyncTypeWire&lt;T&gt;</code> extends <code>TypeWire&lt;T&gt;</code>; typecheck the repo's tests and examples. O3 only adds overloads for the new option.</td></tr>
+        <tr id="K8"><td><b>K8.</b> Adoption: users must mark wires (and the sync leaves they import must be sync-typed)</td><td>O3</td><td>Leaves need no mark: a <code>creator</code> that returns a value is typed sync automatically (E5). Only <code>createWith</code> wires opt in.</td></tr>
+        <tr id="K9"><td><b>K9.</b> Cycle-path corruption from mixing sync and async reads</td><td>O1, O2</td><td>Build after #20's per-step chains.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="recommendation">
+    <h2>Recommendation</h2>
+    <ul>
+      <li id="R2"><b>R2.</b> O3. It keeps your type-safe chain: sync-ness is something the author states and the compiler proves, so a deep change to async fails the build instead of a page at runtime. It changes nothing for unmarked wires, needs no runtime guessing and no #20, and behaves the same on the Inversify adapter.</li>
+      <li><b>Cost:</b> the React fix is opt-in. A <code>createWith</code> wire suspends on first mount until its author marks it sync.</li>
+      <li><b>Later:</b> O3 doesn't rule out O2. If marking feels heavy, inferring the sync type can come later on top of #20.</li>
+    </ul>
+  </section>
+
+  <section id="answer" class="answer">
+    <h2>Your answer</h2>
+    <form id="answer-form">
+      <fieldset>
+        <legend>Q3. Which direction for sync createWith?</legend>
+        <label><input type="radio" name="Q3" value="O3 — explicit sync wires, compiler-checked; unmarked wires unchanged" checked> O3 (recommended): explicit sync wires, compiler-checked</label>
+        <label><input type="radio" name="Q3" value="O2 — inferred SyncTypeWire types plus runtime detection, after #20"> O2: inferred types + runtime detection, after #20</label>
+        <label><input type="radio" name="Q3" value="O1 — runtime detection only, after #20"> O1: runtime detection only</label>
+        <label><input type="radio" name="Q3" value="O0 — keep createWith always async; document preloading instead"> O0: keep today, document preloading</label>
+      </fieldset>
+      <fieldset>
+        <legend>Q4. Is #20 still next, separately from this?</legend>
+        <label><input type="radio" name="Q4" value="yes — build #20 as its own PR regardless" checked> Yes (recommended): #20 is a real bug either way</label>
+        <label><input type="radio" name="Q4" value="no — hold #20 for now"> No, hold it</label>
+      </fieldset>
+      <label for="notes">Anything else?</label>
+      <textarea id="notes" name="notes" placeholder="Optional"></textarea>
+    </form>
+    <p>Copy this and paste it back into the chat:</p>
+    <pre id="answer-text"></pre>
+    <button type="button" id="copy">Copy answer</button>
+  </section>
+
+  <footer>Composed 2026-11-06 by Claude Code (Opus 5.5) using html-for-humans, from the person's concern that runtime detection loses the type-safe dependency chain, packages/core/src/index.ts at a9dc4ac, a runtime spike of O1 (E4, E7) and a tsc 5.8.2 --strict type spike (E5, E6). Follows product.html and design.html in this folder.</footer>
+</main>
+<script>
+(function(){
+  var form=document.getElementById('answer-form'); if(!form) return;
+  var out=document.getElementById('answer-text'), btn=document.getElementById('copy');
+  var title=document.querySelector('h1').textContent.trim();
+  function build(){
+    var lines=['Answer to: '+title];
+    form.querySelectorAll('fieldset').forEach(function(fs){
+      var picked=fs.querySelector('input:checked');
+      lines.push(fs.querySelector('legend').textContent.trim()+' → '+(picked?picked.value:'(no answer)'));
+    });
+    var notes=form.querySelector('textarea').value.trim();
+    if(notes) lines.push('Notes: '+notes);
+    out.textContent=lines.join('\n');
+  }
+  form.addEventListener('input',build); build();
+  btn.addEventListener('click',function(){
+    var done=function(){btn.textContent='Copied';setTimeout(function(){btn.textContent='Copy answer'},1500)};
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(out.textContent).then(done,function(){selectText()});
+    } else selectText();
+  });
+  function selectText(){var r=document.createRange();r.selectNodeContents(out);var s=getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='Selected, copy it'}
+})();
+</script>
+</body>
+</html>
