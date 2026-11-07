@@ -76,3 +76,6 @@ jobs:
 
     - name: Test
       run: pnpm test
+
+    - name: Test release scripts
+      run: pnpm test:scripts

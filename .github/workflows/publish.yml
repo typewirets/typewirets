@@ -2,7 +2,8 @@ name: Publish to npm
 
 # Stages every publishable package on npm through trusted publishing (OIDC),
 # waits until a maintainer approves each one on npm with 2FA, then creates the
-# v<version> tag and GitHub release. See "Releasing" in MAINTAINING.md.
+# v<version> tag and GitHub release. Nothing is committed to the repository.
+# See "Releasing" in MAINTAINING.md and docs/projects/2026-11-07-npm-release/.
 
 on:
   workflow_dispatch:
@@ -10,17 +11,18 @@ on:
       version:
         type: string
         required: true
-        description: "Version to publish (e.g. 0.1.1, 0.2.0-rc.1)"
+        description: "Version to release (e.g. 0.2.0, 0.2.0-rc.1)"
       dry-run:
         type: boolean
         default: true
-        description: "Dry run (build and pack only, stage nothing)"
+        description: "Dry run (check, build and pack only; stage nothing)"
 
 concurrency:
   group: publish
   cancel-in-progress: false
 
-permissions: {}
+permissions:
+  contents: read
 
 env:
   VERSION: ${{ inputs.version }}
@@ -41,20 +43,30 @@ jobs:
       contents: read
       id-token: write
     outputs:
-      packages: ${{ steps.pack.outputs.packages }}
+      packages: ${{ steps.plan.outputs.packages }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - name: Require main for a real publish
+      - name: Require main for a real release
         if: inputs['dry-run'] == false && github.ref != 'refs/heads/main'
         run: |
-          echo "::error::Publish from main, not $GITHUB_REF"
+          echo "::error::Release from main, not $GITHUB_REF"
           exit 1
 
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
+
+      # As in ci.yml: a pinned Corepack installs the pnpm version in
+      # packageManager and checks its sha512.
+      - name: Setup pnpm
+        run: |
+          npm install -g corepack@0.36.0
+          corepack enable
+          pnpm --version
 
       # Trusted publishing needs npm >= 11.5.1 and staging needs >= 11.15.0;
       # Node 22 ships npm 10.
@@ -63,29 +75,19 @@ jobs:
           npm install -g npm@11.21.1
           npm --version
 
-      - name: Enable Corepack
-        run: corepack enable
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check version, changelogs and npm; set package versions
-        run: node scripts/release.mjs prepare "$VERSION"
-
-      - name: Check tag doesn't already exist
+      # Refuses a version that isn't valid, isn't above npm's latest, has no
+      # changelog section or is already tagged. Writes the plan, including the
+      # packages already live (finishing a partly approved release), and sets
+      # the package versions for this run only.
+      - name: Plan the release
+        id: plan
         run: |
-          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null; then
-            echo "::error::Tag v$VERSION already exists"
-            exit 1
-          fi
-
-      - name: Choose dist-tag
-        run: |
-          if [[ "$VERSION" == *-* ]]; then
-            echo "DIST_TAG=next" >> "$GITHUB_ENV"
-          else
-            echo "DIST_TAG=latest" >> "$GITHUB_ENV"
-          fi
+          node scripts/release.mjs prepare "$VERSION" dist-release
+          echo "packages=$(node -p "require('./dist-release/plan.json').packages.join(' ')")" >> "$GITHUB_OUTPUT"
+          echo "DIST_TAG=$(node -p "require('./dist-release/plan.json').distTag")" >> "$GITHUB_ENV"
 
       - name: Build
         run: pnpm build
@@ -94,10 +96,7 @@ jobs:
         run: node scripts/check-cjs-entry-points.mjs
 
       - name: Pack
-        id: pack
-        run: |
-          node scripts/release.mjs pack "$VERSION" dist-release
-          echo "packages=$(cut -d' ' -f1 dist-release/publish-order.txt | paste -sd' ')" >> "$GITHUB_OUTPUT"
+        run: node scripts/release.mjs pack "$VERSION" dist-release
 
       # Without the OIDC variables npm skips the token exchange; a dry run
       # needs no credentials.
@@ -108,11 +107,15 @@ jobs:
             env -u ACTIONS_ID_TOKEN_REQUEST_URL -u ACTIONS_ID_TOKEN_REQUEST_TOKEN \
               npm stage publish "$tarball" --dry-run --access public --tag "$DIST_TAG" < /dev/null
           done < dist-release/publish-order.txt
-          echo "::notice::Dry run complete: packed v$VERSION successfully. Re-run with dry-run=false to stage it on npm."
+          echo "::notice::Dry run complete: v$VERSION checks out. Re-run with dry-run unchecked to stage it on npm."
 
       - name: Stage
         if: inputs['dry-run'] == false
         run: |
+          if [ ! -s dist-release/publish-order.txt ]; then
+            echo "Every package is already live at $VERSION; nothing to stage." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           {
             echo "## v$VERSION is staged on npm"
             echo
@@ -180,11 +183,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: Check provenance
+        run: node scripts/release.mjs verify "$VERSION"
+
       - name: Write release notes
         run: node scripts/release.mjs notes "$VERSION" > release-notes.md
 
-      # Creates the tag on the commit this run built from, not on the current
-      # tip of main.
+      # Creates the tag through the GitHub API on the commit this run built
+      # from, not on the current tip of main. Nothing is pushed.
       - name: Create tag and release
         env:
           GH_TOKEN: ${{ github.token }}
