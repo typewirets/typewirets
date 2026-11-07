@@ -59,10 +59,10 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
 <main>
   <header>
     <h1>The maintainer ships every typewirets release from GitHub, and nothing goes live without their own 2FA</h1>
-    <div class="meta"><span>Key: npm-release</span><span>Date: <time datetime="2026-11-07">2026-11-07</time></span><span>Author: Claude Code, with the maintainer</span><span>Status: draft, awaiting approval</span><span>Source: the maintainer's answers in chat, 2026-10-23 to 2026-11-07</span></div>
+    <div class="meta"><span>Key: npm-release</span><span>Date: <time datetime="2026-11-07">2026-11-07</time></span><span>Author: Claude Code, with the maintainer</span><span>Status: draft 2, awaiting approval</span><span>Source: the maintainer's answers in chat, 2026-10-23 to 2026-11-07</span></div>
   </header>
 
-  <p class="takeaway">One run on GitHub releases all three typewirets packages at one version. The maintainer approves each package on npm with their own 2FA, and only then do the git tag and GitHub release appear. No npm token is stored anywhere. The behaviour below delivers that.</p>
+  <p class="takeaway">One run on GitHub releases all three typewirets packages at one version. The maintainer approves each package on npm with their own 2FA, and only then do the git tag and GitHub release appear. No npm token is stored anywhere, and the repository itself never changes. The behaviour below delivers that.</p>
 
   <section id="value">
     <h2>Value</h2>
@@ -73,6 +73,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
       <li id="V3"><b>V3.</b> No long-lived npm token to leak or rotate, and the flow keeps working after npm ends direct publishing with tokens in January 2027.</li>
       <li id="V4"><b>V4.</b> A tag or GitHub release never exists for a version that isn't installable from npm. <small>Proposed by the agent; see Q1.</small></li>
       <li id="V5"><b>V5.</b> Anyone can check which commit of this repository a published version was built from.</li>
+      <li id="V6"><b>V6.</b> <code>main</code> carries no release commits: no version bumps and nothing merged back after a release. <small>The maintainer: "avoid updating our package.json version… not needing to have traditional commits both for our releases and then merging that back into main."</small></li>
     </ul>
   </section>
 
@@ -100,7 +101,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
           <text x="283" y="76" fill="var(--ok)">you, on npm, 2FA</text>
           <text x="368" y="76" fill="var(--muted)">on GitHub</text>
           <rect x="166" y="112" width="232" height="34" rx="6" fill="var(--surface)" stroke="var(--warn)"/>
-          <text x="282" y="133">Recover: late approval, rejection (B13–B14)</text>
+          <text x="282" y="133">Recover: late, partial, none (B13–B15)</text>
         </g>
         <g stroke="var(--muted)" fill="none">
           <line x1="72" y1="39" x2="84" y2="39"/><line x1="154" y1="39" x2="166" y2="39"/>
@@ -108,8 +109,8 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
           <line x1="283" y1="84" x2="283" y2="112" stroke-dasharray="3 3"/>
         </g>
       </svg>
-      <figcaption id="flowcap"><b>The only step on npm is yours.</b> GitHub starts, checks, stages and finishes the release; your 2FA approval on npm is what makes each package live. Recovery covers an approval that comes late and a release you reject.
-        <details><summary>Data</summary>Start (B1–B2) → Guard (B3–B4) → Stage (B5–B7), on GitHub → Approve, by the maintainer with 2FA on npm (B8–B9) → Finish (B10–B12), on GitHub. Recover (B13–B14) branches from Approve.</details>
+      <figcaption id="flowcap"><b>The only step on npm is yours.</b> GitHub starts, checks, stages and finishes the release; your 2FA approval on npm is what makes each package live. Recovery covers an approval that comes late, comes for only some packages, or never comes. Throughout, the repository itself never changes (B16).
+        <details><summary>Data</summary>Start (B1–B2) → Guard (B3–B4) → Stage (B5–B7), on GitHub → Approve, by the maintainer with 2FA on npm (B8–B9) → Finish (B10–B12), on GitHub. Recover (B13–B15) branches from Approve. B16 holds for every step.</details>
       </figcaption>
     </figure>
   </section>
@@ -119,9 +120,9 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
     <div class="scroll"><table>
       <thead><tr><th>Group</th><th>What happens</th></tr></thead>
       <tbody>
-        <tr id="B1"><td>Start</td><td><b>B1.</b> The maintainer starts a release from GitHub by giving one version number, and all three packages are released at that version. <small>Q2: the maintainer types it.</small></td></tr>
-        <tr id="B2"><td>Start</td><td><b>B2.</b> A dry run is the default. It checks and packages the release the same way a real run does, and nothing changes on npm, in git tags or in GitHub releases.</td></tr>
-        <tr id="B3"><td>Guard</td><td><b>B3.</b> A release refuses to start, and says why, when the version isn't valid, a package's changelog has no section for it, the version is already on npm, its tag already exists, or a real (not dry) run isn't from <code>main</code>.</td></tr>
+        <tr id="B1"><td>Start</td><td><b>B1.</b> The maintainer starts a release from GitHub by giving one version number, and all three packages are released at that version. <small>Q2: the maintainer types it; npm guards it (B3).</small></td></tr>
+        <tr id="B2"><td>Start</td><td><b>B2.</b> A dry run is the default. It checks and packages the release the same way a real run does, and nothing changes on npm, in git tags or in GitHub releases. It also shows the latest version on npm and the next patch, minor and major numbers.</td></tr>
+        <tr id="B3"><td>Guard</td><td><b>B3.</b> A release refuses to start, and says why, when the version isn't valid, it isn't higher than the latest version on npm, a package's changelog has no section for it, its tag already exists, or a real (not dry) run isn't from <code>main</code>.<br><small>One exception: finishing a partly approved release at its own version (B15).</small></td></tr>
         <tr id="B4"><td>Guard</td><td><b>B4.</b> Every package as shipped carries the release version and depends on <code>@typewirets/core</code> at exactly that version. <small>The packages ship together (MAINTAINING.md, Release Checklist).</small></td></tr>
         <tr id="B5"><td>Stage</td><td><b>B5.</b> A real run puts all three packages on npm awaiting approval, and none can be installed yet.</td></tr>
         <tr id="B6"><td>Stage</td><td><b>B6.</b> The run tells the maintainer what to approve: one entry per package, <code>@typewirets/core</code> first.</td></tr>
@@ -132,7 +133,9 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
         <tr id="B11"><td>Finish</td><td><b>B11.</b> The GitHub release notes are each package's changelog section for that version, and a pre-release is marked as one.</td></tr>
         <tr id="B12"><td>Finish</td><td><b>B12.</b> Each published version shows provenance that names this repository and the release's commit.</td></tr>
         <tr id="B13"><td>Recover</td><td><b>B13.</b> If the maintainer approves after the run has stopped waiting, they resume the same release. It then creates the tag and GitHub release, and stages nothing again.</td></tr>
-        <tr id="B14"><td>Recover</td><td><b>B14.</b> If the maintainer rejects a staged package or abandons the release, no tag and no GitHub release are created.<br><small>Whether a rejected version number can be staged again is for the design brief to confirm.</small></td></tr>
+        <tr id="B14"><td>Recover</td><td><b>B14.</b> If the maintainer rejects the staged packages or never approves them, no tag and no GitHub release are created, and the same version can be released again later.<br><small>Whether npm accepts a new stage while an old one is still pending is for the design brief to find out.</small></td></tr>
+        <tr id="B15"><td>Recover</td><td><b>B15.</b> If only some packages were approved, the release can still be completed: a new run stages only the packages that aren't live at that version, and the tag and GitHub release appear once all three are live.<br><small>The packages ship together (MAINTAINING.md), so a lone new <code>core</code> must not be a dead end.</small></td></tr>
+        <tr id="B16"><td>Always</td><td><b>B16.</b> A release never changes files in the repository or adds commits to <code>main</code>. Package versions on <code>main</code> stay a placeholder; a released version lives on npm and in its tag.<br><small>The changelog sections for a version are written beforehand, in an ordinary pull request.</small></td></tr>
       </tbody>
     </table></div>
     <p>How it's built (workflow shape, how the run waits, tools) and the bounds are in the design brief, which comes after this one is approved.</p>
@@ -149,8 +152,8 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
       </fieldset>
       <fieldset>
         <legend>Q2. Who picks the version?</legend>
-        <label><input type="radio" name="Q2" value="A — the maintainer types it when starting the run" checked> A (recommended): you type it when starting the run; a suggestion can come later</label>
-        <label><input type="radio" name="Q2" value="B — the run proposes one from commits, like typewirepy's /release skill"> B: the run proposes one from commits, like typewirepy's <code>/release</code> skill</label>
+        <label><input type="radio" name="Q2" value="A — the maintainer types the exact version; npm's latest guards it and the dry run suggests the next numbers" checked> A (recommended): you type the exact version; the run refuses anything not above npm's latest, and the dry run suggests the next numbers. You need the number anyway for the changelog heading.</label>
+        <label><input type="radio" name="Q2" value="B — the maintainer picks patch, minor or major and the run computes the version from npm's latest"> B: you pick patch, minor or major, and the run computes the version from npm's latest. The changelog heading must then match the computed number.</label>
       </fieldset>
       <fieldset>
         <legend>Q3. What counts as done? (for the design brief)</legend>
@@ -158,7 +161,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
         <label><input type="radio" name="Q3" value="B — a passing dry run; the first real release is a separate step"> B: a passing dry run; the first real release is a separate step</label>
       </fieldset>
       <fieldset>
-        <legend>Approve this product brief (V0–V5, B1–B14)?</legend>
+        <legend>Approve this product brief (V0–V6, B1–B16)?</legend>
         <label><input type="radio" name="A" value="approved — go on to the design brief" checked> Approved: go on to the design brief</label>
         <label><input type="radio" name="A" value="changes needed (see notes)"> Changes needed (say what in the notes)</label>
       </fieldset>

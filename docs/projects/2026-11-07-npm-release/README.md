@@ -2,7 +2,7 @@
 
 The maintainer releases `@typewirets/core`, `@typewirets/inversify` and `@typewirets/react` from GitHub in one run, at one version. Each package goes live only after the maintainer approves it on npm with 2FA, and the tag and GitHub release follow. No npm token is stored anywhere.
 
-- [product.html](product.html): value V0–V5, behaviour B1–B14. Status: draft, awaiting approval and answers to Q1–Q3.
+- [product.html](product.html): value V0–V6, behaviour B1–B16. Status: draft 2, awaiting approval and answers to Q1–Q3.
 - design.html: not started. Comes after the product brief is approved.
 
 ## Where things stand
@@ -12,18 +12,22 @@ The maintainer releases `@typewirets/core`, `@typewirets/inversify` and `@typewi
 - 2026-10-26: the maintainer chose staged publishing over a GitHub environment reviewer, and asked whether the run can wait for the npm approval.
 - 2026-10-26: a first implementation was built before the factory was installed: `.github/workflows/publish.yml`, `scripts/release.mjs` and the "Releasing" section of MAINTAINING.md (PR #23, commit 90b8ee6 after rebasing onto main). Treat it as a prototype until the design brief picks an approach.
 - 2026-11-07: rebased onto main (factory install #27, SHA pins #25, pinned corepack #26). Product brief drafted.
+- 2026-11-07: the maintainer wants no release commits on `main`: package versions stay a placeholder, and the version comes from the run, checked against what npm already has (V6, B16, B3, B2, Q2 reworked). The changelog heading for a version is still written beforehand in an ordinary PR; releasing straight from `## Unreleased` would leave `main`'s changelog without versions.
+- 2026-11-07: an unapproved release must be recoverable (B14), and a partly approved one must be completable at the same version (B15), because the packages ship together.
+- 2026-11-07: the maintainer keeps Node 22 in CI and the pinned Corepack from #26; PR #19 (Node 24 minimum, pnpm 12) is theirs to revisit separately.
 
 ## Open, for the product brief (answer block in product.html)
 
 - Q1. When the tag and GitHub release appear. Recommended: only after every package is live.
-- Q2. Who picks the version. Recommended: the maintainer types it.
+- Q2. Who picks the version. Recommended: the maintainer types the exact version, guarded by npm's latest, with the dry run suggesting the next numbers.
 - Q3. What counts as done. Recommended: the next real release (likely 0.2.0) ships end to end.
 
 ## Open, for the design brief
 
 - The prototype doesn't yet follow AGENTS.md: top-level `permissions` should start from `contents: read`; `persist-credentials: false` is missing on the staging checkout; pnpm should come from the pinned `corepack@0.36.0` install, as in `ci.yml`.
 - How the run waits for approval (the prototype polls the public registry for up to 3 hours, and "Re-run failed jobs" resumes it), weighed against alternatives.
-- Whether a rejected version number can be staged again (B14).
+- npm unknowns, best settled with a throwaway package before the first real release: whether a staged package expires; whether npm accepts a new stage of a version while an old one is pending (B14); whether a first stage that is never approved counts as the "first successful publish" that keeps a new trusted-publisher configuration from expiring after 2 days.
+- B15 needs the prototype changed: it refuses a version that is already on npm for any package, so it can't complete a partly approved release.
 - The changelogs: main has `## Unreleased` entries above `## 0.1.1`, and 0.1.1 was never published.
 
 ## Next steps
