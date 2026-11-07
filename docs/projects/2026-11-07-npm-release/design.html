@@ -134,7 +134,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
     <ul>
       <li id="N1"><b>N1.</b> AGENTS.md holds: SHA-pinned actions from GitHub only (checkout, setup-node, upload-artifact, download-artifact), top-level <code>contents: read</code>, no persisted credentials, pnpm from the pinned Corepack, no new dependencies.</li>
       <li id="N2"><b>N2.</b> Node 22 and Corepack stay as in <code>ci.yml</code>; PR #19 (Node 24, pnpm 12) is separate.</li>
-      <li id="N3"><b>N3.</b> Not now: a version suggested from commits (Q2 B), a release skill, publishing to registries other than npm.</li>
+      <li id="N3"><b>N3.</b> Not now: publishing to registries other than npm. A version suggested from commits was added later on the maintainer's request, as advice only: the <code>release</code> skill and <code>release.mjs suggest</code>. The run still takes the version the maintainer types (Q2 A).</li>
       <li id="L1"><b>L1.</b> The builder decides the script's structure and the wording of summaries. It checks first before adding any action or dependency, or widening permissions.</li>
       <li id="L2"><b>L2.</b> Done comes in two stages (Q3 A): this PR is mergeable with every testable line covered, then, after merging, the next real release (likely 0.2.0) ships end to end. A workflow can only be dispatched from <code>main</code>, so stage 2 needs the merge.</li>
     </ul>

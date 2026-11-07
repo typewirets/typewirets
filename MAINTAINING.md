@@ -64,15 +64,16 @@ The workflow publishes with npm [trusted publishing](https://docs.npmjs.com/trus
 
 ### Releasing a version
 
-1. On `main`, give each publishable package's `CHANGELOG.md` a `## <version>` section, in an ordinary pull request. The workflow refuses to run without one, and the GitHub release notes are built from these sections.
-2. Run **Publish to npm** from the Actions tab on `main` with the version and **dry-run** checked. It runs CI, checks the version, builds, packs and checks every tarball, and stages nothing. Its summary shows the latest version on npm and the next patch, minor and major numbers. It refuses a version that isn't higher than npm's latest, lacks a changelog section, or is already tagged.
-3. Run it again with **dry-run** unchecked. Real releases run one at a time; dry runs never wait behind them. When the **Stage on npm** job finishes, its summary lists one `npm stage approve <stage-id>` command per package.
-4. Approve each package with 2FA, `@typewirets/core` first, because the other packages pin it to the exact version:
+1. Pick the version. The `release` skill (`/release` in Claude Code) suggests one from the commits since the latest version on npm, checks the changelogs, and can open the changelog PR; `node scripts/release.mjs suggest origin/main` prints the same suggestion. Below 1.0.0 a breaking change bumps the minor version.
+2. On `main`, give each publishable package's `CHANGELOG.md` a `## <version>` section, in an ordinary pull request. The workflow refuses to run without one, and the GitHub release notes are built from these sections.
+3. Run **Publish to npm** from the Actions tab on `main` with the version and **dry-run** checked. It runs CI, checks the version, builds, packs and checks every tarball, and stages nothing. Its summary shows the latest version on npm and the next patch, minor and major numbers. It refuses a version that isn't higher than npm's latest, lacks a changelog section, or is already tagged.
+4. Run it again with **dry-run** unchecked. Real releases run one at a time; dry runs never wait behind them. When the **Stage on npm** job finishes, its summary lists one `npm stage approve <stage-id>` command per package.
+5. Approve each package with 2FA, `@typewirets/core` first, because the other packages pin it to the exact version:
    - on npmjs.com, in the **Staged Packages** tab, or
    - from a terminal where you are logged in: `npm stage approve <stage-id>` (npm prompts for your one-time code).
 
    You can inspect a staged tarball first with `npm stage download <stage-id>`, or discard it with `npm stage reject <stage-id>`.
-5. The **Wait for approval on npm** job checks the public registry every minute. Once every package is live, **Tag and GitHub release** creates the `v<version>` tag on the commit the run built from, along with the GitHub release.
+6. The **Wait for approval on npm** job checks the public registry every minute. Once every package is live, **Tag and GitHub release** creates the `v<version>` tag on the commit the run built from, along with the GitHub release.
 
 Versions with a pre-release suffix (e.g. `0.2.0-rc.1`) are published under the `next` dist-tag and marked as pre-releases on GitHub. Plain `X.Y.Z` versions are published under `latest`.
 

@@ -8,13 +8,17 @@ import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import {
   changelogSection,
+  changelogVersions,
   checkPackedManifest,
+  commitImpact,
   compareVersions,
+  latestStable,
   nextVersions,
   planRelease,
   provenanceCommit,
   publishOrder,
   releaseNotes,
+  suggestVersion,
   withVersion,
 } from "./release.mjs";
 
@@ -58,6 +62,87 @@ describe("nextVersions", () => {
       minor: "0.1.0",
       major: "1.0.0",
     });
+  });
+});
+
+describe("suggesting the next version (release skill)", () => {
+  const commit = (subject, body = "") => ({ subject, body });
+
+  test("rates commits by Conventional Commits", () => {
+    assert.equal(commitImpact(commit("feat: add preload")), "feature");
+    assert.equal(
+      commitImpact(commit("feat(react): add usePreload")),
+      "feature",
+    );
+    assert.equal(
+      commitImpact(commit("fix(core)!: drop getAllAsync")),
+      "breaking",
+    );
+    assert.equal(commitImpact(commit("feat!: rename apply")), "breaking");
+    assert.equal(
+      commitImpact(
+        commit("refactor: tidy", "Text.\n\nBREAKING CHANGE: bind is async"),
+      ),
+      "breaking",
+    );
+    for (const subject of [
+      "fix(core): keep cache",
+      "docs: list ports",
+      "chore(ci): bump",
+      "Update GitHub Actions to latest versions (#14)",
+      "feature: not the convention",
+    ]) {
+      assert.equal(commitImpact(commit(subject)), "patch", subject);
+    }
+  });
+
+  test("the strongest commit decides the bump", () => {
+    const fixes = [commit("fix: a"), commit("docs: b")];
+    assert.deepEqual(
+      [suggestVersion({ latest: "1.2.3", commits: fixes })].map((s) => [
+        s.bump,
+        s.version,
+      ]),
+      [["patch", "1.2.4"]],
+    );
+    const withFeature = [...fixes, commit("feat: c")];
+    assert.equal(
+      suggestVersion({ latest: "1.2.3", commits: withFeature }).version,
+      "1.3.0",
+    );
+    const withBreaking = [...withFeature, commit("feat!: d")];
+    assert.equal(
+      suggestVersion({ latest: "1.2.3", commits: withBreaking }).version,
+      "2.0.0",
+    );
+  });
+
+  test("below 1.0.0 a breaking change bumps the minor version", () => {
+    const s = suggestVersion({ latest: "0.1.0", commits: [commit("fix!: e")] });
+    assert.equal(s.bump, "minor");
+    assert.equal(s.version, "0.2.0");
+  });
+
+  test("no commits since the latest version means nothing to release", () => {
+    assert.deepEqual(suggestVersion({ latest: "0.1.0", commits: [] }), {
+      bump: null,
+      version: null,
+      commits: [],
+    });
+  });
+
+  test("the latest version ignores pre-releases", () => {
+    assert.equal(latestStable(["0.1.0", "0.2.0-rc.1", "0.1.1"]), "0.1.1");
+    assert.equal(latestStable(["0.2.0-rc.1"]), undefined);
+  });
+
+  test("finds every version heading in a changelog", () => {
+    assert.deepEqual(
+      changelogVersions(
+        "# Changelog\n\n## Unreleased\n\n## 0.1.1\n\n- x\n\n## 0.1.0\n",
+      ),
+      ["0.1.1", "0.1.0"],
+    );
   });
 });
 

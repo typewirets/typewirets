@@ -16,6 +16,9 @@
 //     Prints GitHub release notes built from each package's changelog section.
 //   node scripts/release.mjs verify <version>
 //     Warns about any package whose npm provenance doesn't name this commit.
+//   node scripts/release.mjs suggest [ref]
+//     Suggests the next version from the commits between the latest version on
+//     npm (its v<version> tag) and ref (default HEAD). Used by the release skill.
 //
 // The pure functions are exported for scripts/release.test.mjs.
 import { execFileSync } from "node:child_process";
@@ -80,6 +83,41 @@ function highest(versions) {
     .reduce((max, v) => (!max || compareVersions(v, max) > 0 ? v : max), "");
 }
 
+// The highest version without a pre-release suffix, or undefined.
+export function latestStable(versions) {
+  return (
+    highest(versions.filter((v) => parseVersion(v)?.pre.length === 0)) ||
+    undefined
+  );
+}
+
+// How a commit changes the public API, from its Conventional Commits message:
+// "breaking" for `type!:` or a BREAKING CHANGE footer, "feature" for `feat:`,
+// "patch" for everything else (fix, docs, chore, ci, and messages that don't
+// follow the convention).
+export function commitImpact({ subject, body = "" }) {
+  if (/^\w+(\([^)]*\))?!:/.test(subject)) return "breaking";
+  if (/^BREAKING[ -]CHANGE:/m.test(body)) return "breaking";
+  if (/^feat(\([^)]*\))?:/.test(subject)) return "feature";
+  return "patch";
+}
+
+// The next version after `latest` for these commits. Below 1.0.0 a breaking
+// change bumps the minor version: npm's ^0.1.0 already excludes 0.2.0, so
+// users are protected, and 1.0.0 stays a deliberate decision. Returns
+// { bump, version, commits } with each commit's impact, or a null bump and
+// version when there is nothing to release.
+export function suggestVersion({ latest, commits }) {
+  const rated = commits.map((c) => ({ ...c, impact: commitImpact(c) }));
+  if (rated.length === 0) return { bump: null, version: null, commits: rated };
+  const impacts = new Set(rated.map((c) => c.impact));
+  const [major] = parseVersion(latest ?? "0.0.0").core;
+  let bump = "patch";
+  if (impacts.has("breaking")) bump = major === 0 ? "minor" : "major";
+  else if (impacts.has("feature")) bump = "minor";
+  return { bump, version: nextVersions(latest)[bump], commits: rated };
+}
+
 export function nextVersions(latest) {
   const [major, minor, patch] = parseVersion(latest ?? "0.0.0").core;
   return {
@@ -118,10 +156,7 @@ export function provenanceCommit(attestations) {
 // packages are skipped, so a partly approved release can be finished at its
 // own version, but only from the commit it was built from.
 export function planRelease({ version, packages, tagExists, commit }) {
-  const allVersions = packages.flatMap((p) => p.versions ?? []);
-  const latest =
-    highest(allVersions.filter((v) => parseVersion(v)?.pre.length === 0)) ||
-    undefined;
+  const latest = latestStable(packages.flatMap((p) => p.versions ?? []));
   const plan = {
     version,
     distTag: "latest",
@@ -216,6 +251,14 @@ export function changelogSection({ changelog, version }) {
     .join("\n")
     .trim();
   return section || undefined;
+}
+
+// Version headings in a changelog ("## 0.1.1"), in order.
+export function changelogVersions(changelog) {
+  return changelog
+    .split("\n")
+    .map((line) => /^## (\S+)\s*$/.exec(line)?.[1])
+    .filter((v) => v && parseVersion(v));
 }
 
 export function releaseNotes({ version, sections }) {
@@ -437,6 +480,81 @@ async function verify(version) {
   }
 }
 
+// Prints a suggestion for the next version, for the release skill to check.
+async function suggest(ref) {
+  const packages = publishablePackages();
+  let latest;
+  let commits;
+  let published;
+  try {
+    const versions = await Promise.all(
+      packages.map((pkg) => npmVersions(pkg.manifest.name)),
+    );
+    published = new Set(versions.flatMap((v) => v ?? []));
+    latest = latestStable([...published]);
+    const range = latest ? `v${latest}..${ref}` : ref;
+    if (latest) {
+      execFileSync(
+        "git",
+        ["rev-parse", "--verify", "--quiet", `v${latest}^{commit}`],
+        {
+          stdio: "ignore",
+        },
+      );
+    }
+    const log = execFileSync(
+      "git",
+      ["log", "--first-parent", "--format=%s%x1f%b%x1e", range],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    );
+    commits = log
+      .split("\x1e")
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .map((entry) => {
+        const [subject, body = ""] = entry.split("\x1f");
+        return { subject, body };
+      });
+  } catch (err) {
+    fail(
+      `Refused: ${err.message.split("\n")[0]}. Fetch the tags first: git fetch --tags origin`,
+    );
+  }
+
+  const suggestion = suggestVersion({ latest, commits });
+  const lines = [
+    `Latest version on npm: ${latest ?? "none"} (tag v${latest ?? "-"})`,
+    `Commits since then on ${ref}: ${commits.length}`,
+    "",
+    ...suggestion.commits.map((c) => `- ${c.impact.padEnd(8)} ${c.subject}`),
+    "",
+    suggestion.version
+      ? `Suggested: ${suggestion.version} (${suggestion.bump})`
+      : "Nothing to release: no commits since the latest version.",
+    "",
+    "Changelogs:",
+  ];
+  for (const pkg of packages) {
+    const changelog = readChangelog(pkg);
+    const unreleased = changelogSection({ changelog, version: "Unreleased" });
+    const heading = suggestion.version
+      ? changelogSection({ changelog, version: suggestion.version })
+      : undefined;
+    lines.push(
+      `- ${pkg.manifest.name}: ${heading ? `has "## ${suggestion.version}"` : unreleased ? 'entries under "## Unreleased"' : "no entries"}`,
+    );
+    const neverPublished = changelogVersions(changelog).filter(
+      (v) => !published.has(v) && v !== suggestion.version,
+    );
+    if (neverPublished.length > 0) {
+      lines.push(
+        `  never published: ${neverPublished.map((v) => `"## ${v}"`).join(", ")}`,
+      );
+    }
+  }
+  console.log(lines.join("\n"));
+}
+
 function notes(version) {
   const sections = publishablePackages().map((pkg) => {
     const section = changelogSection({
@@ -452,11 +570,14 @@ function notes(version) {
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const usage =
-    "Usage: node scripts/release.mjs <prepare|pack|notes|verify> <version> [outDir]";
+    "Usage: node scripts/release.mjs <prepare|pack|notes|verify> <version> [outDir]\n       node scripts/release.mjs suggest [ref]";
   const [command, version, outDir] = process.argv.slice(2);
-  if (!version) fail(usage);
 
-  if (command === "prepare" && outDir) {
+  if (command === "suggest") {
+    await suggest(version ?? "HEAD");
+  } else if (!version) {
+    fail(usage);
+  } else if (command === "prepare" && outDir) {
     await prepare(version, outDir);
   } else if (command === "pack" && outDir) {
     pack(version, outDir);
