@@ -17,6 +17,11 @@ TypeWire is a lightweight, container-agnostic dependency injection library for T
 - [@typewirets/core](./packages/core/README.md) - Core TypeWire functionality
 - [@typewirets/inversify](./packages/inversify/README.md) - InversifyJS adapter
 
+Other ports of the same design, sharing rules P1–P10 through a common conformance suite:
+
+- [typewirepy](https://github.com/typewirepy/typewirepy) - the Python port
+- [typewirego](https://github.com/typewirego/typewirego) - the Go port
+
 ## Documentation
 
 In addition to the README files in each package, we provide several documents that explain the design philosophy and usage patterns of TypeWire:
