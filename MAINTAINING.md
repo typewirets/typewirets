@@ -87,7 +87,7 @@ Versions with a pre-release suffix (e.g. `0.2.0-rc.1`) are published under the `
 ### One-time setup
 
 - **GitHub:** create the environment `npm` (Settings → Environments) and limit it to the `main` branch under deployment branches. Only the **Stage on npm** job uses it. That job is the only one that can get the npm token, and it runs no repository or dependency code: it stages the tarballs the build job packed.
-- **npm:** for each publishable package, open Settings → Trusted publishing on npmjs.com and add a GitHub Actions publisher: organization `typewirets`, repository `typewirets`, workflow `publish.yml`, environment `npm`. Leave the allowed actions at `npm stage publish` only. A new configuration expires unless it is used for a successful publish within 2 days, so add it right before the first release that uses it.
+- **npm:** for each publishable package, open Settings → Trusted publishing on npmjs.com and add a GitHub Actions publisher: organization `typewirets`, repository `typewirets`, workflow `publish.yml`, environment `npm`. Staging (`npm stage publish`) is always allowed; leave **Allow npm publish** and **Allow npm dist-tag** unchecked, as they are by default, so a run can only stage. Your npm account needs 2FA to approve. A new configuration expires unless it is used for a successful publish within 2 days, so add it right before the first release that uses it.
 - **npm, after the first successful release:** set each package's publishing access to **Require two-factor authentication and disallow tokens**. Trusted publishing keeps working.
 - **New packages:** trusted publishing can only be set up for a package that already exists on npm, so publish a new package's first version by hand, then add the trusted publisher.
 

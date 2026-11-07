@@ -27,7 +27,7 @@ The maintainer releases `@typewirets/core`, `@typewirets/inversify` and `@typewi
 
 ## Next steps
 
-1. Merge PR #23 once CI is green (stage 1 of done).
+1. ~~Merge PR #23~~: merged 2026-11-07 as 2a52bab (stage 1 of done).
 2. One-time setup, by the maintainer (MAINTAINING.md, "One-time setup"): the GitHub environment `npm`; a trusted publisher per package on npmjs.com, added right before the first real release.
-3. A changelog PR that moves `## Unreleased` under the release version in all three packages.
+3. `/release` and its changelog PR, moving `## Unreleased` and the never-published `## 0.1.1` under `## 0.2.0` in all three packages. A dry run of 0.1.1 needs no setup and works as a smoke test before that, but 0.1.1 must not be released for real.
 4. Run **Publish to npm** as a dry run, then for real; approve on npm; check that the tag, the GitHub release and provenance appear (stage 2 of done, T5, T6, T10, T12).
