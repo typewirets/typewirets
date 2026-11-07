@@ -33,5 +33,5 @@ The maintainer releases `@typewirets/core`, `@typewirets/inversify` and `@typewi
 ## Next steps
 
 1. The maintainer answers Q1–Q3 and approves the product brief.
-2. Write design.html, with the prototype as the named approach weighed against alternatives, and a test plan that covers B1–B14.
+2. Write design.html, with the prototype as the named approach weighed against alternatives, and a test plan that covers B1–B16.
 3. Rework PR #23 to the picked design.
