@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_call:
 
 permissions:
   contents: read
@@ -75,3 +76,6 @@ jobs:
 
     - name: Test
       run: pnpm test
+
+    - name: Test release scripts
+      run: pnpm test:scripts

@@ -47,8 +47,9 @@ All build and test tasks are orchestrated by [Turborepo](https://turborepo.dev).
 | `pnpm lint` | Lint with Biome |
 | `pnpm fmt` | Format with Biome |
 | `pnpm check-types` | TypeScript type checking across all packages |
+| `pnpm test:scripts` | Test the release scripts and the publish workflow's rules (`node --test`) |
 
-These commands invoke `turbo run <task>` under the hood (see `package.json` scripts).
+These commands invoke `turbo run <task>` under the hood (see `package.json` scripts), except `pnpm test:scripts`, which runs Node's test runner directly.
 
 ### Build caching
 

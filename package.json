@@ -5,6 +5,7 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "test": "turbo test",
+    "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "lint": "biome lint",
     "fmt": "biome format --write",
     "check-types": "turbo run check-types"
