@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The maintainer ships every typewirets release from GitHub, and nothing goes live without their own 2FA</title>
+<style>
+/* Tokens: change values here only. Light first, dark redefines the same names. */
+:root{
+  --bg:#f4f5f7; --surface:#ffffff; --fg:#1a1f27; --muted:#5d6672; --line:#d6dae0;
+  --accent:#2f5fd0; --accent-soft:#e6ecfb;
+  --ok:#1d7a46; --warn:#9a6200; --bad:#b3261e;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+/* Dark: follows the OS unless the viewer picked light; data-theme="dark" forces it. */
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 var(--sans)}
+main{max-width:720px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:28px}
+h1{font-size:1.6rem;line-height:1.2;margin:0;text-wrap:balance}
+h2{font-size:1.15rem;margin:0 0 8px}
+p{margin:0 0 8px}
+small{color:var(--muted)}
+.meta{font:13px/1.4 var(--mono);color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
+.takeaway{background:var(--accent-soft);border-left:4px solid var(--accent);padding:12px 14px;border-radius:0 6px 6px 0;font-weight:600}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+.chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.8rem;font-weight:600;border:1px solid currentColor}
+.chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)}
+figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px}
+figure svg{display:block;width:100%;height:auto}
+figcaption{font-size:.9rem;color:var(--muted);margin-top:8px}
+figcaption b{color:var(--fg)}
+details{margin-top:6px} summary{cursor:pointer}
+fieldset{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:0 0 12px}
+legend{font-weight:600;padding:0 4px}
+label{display:block;padding:4px 0}
+textarea{width:100%;min-height:4.5em;font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px}
+.answer pre{white-space:pre-wrap;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.45 var(--mono)}
+button{font:inherit;font-weight:600;padding:8px 14px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);cursor:pointer}
+button:focus-visible,summary:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>The maintainer ships every typewirets release from GitHub, and nothing goes live without their own 2FA</h1>
+    <div class="meta"><span>Key: npm-release</span><span>Date: <time datetime="2026-11-07">2026-11-07</time></span><span>Author: Claude Code, with the maintainer</span><span>Status: draft, awaiting approval</span><span>Source: the maintainer's answers in chat, 2026-10-23 to 2026-11-07</span></div>
+  </header>
+
+  <p class="takeaway">One run on GitHub releases all three typewirets packages at one version. The maintainer approves each package on npm with their own 2FA, and only then do the git tag and GitHub release appear. No npm token is stored anywhere. The behaviour below delivers that.</p>
+
+  <section id="value">
+    <h2>Value</h2>
+    <ul>
+      <li id="V0"><b>V0.</b> For the typewirets maintainer: release <code>@typewirets/core</code>, <code>@typewirets/inversify</code> and <code>@typewirets/react</code> from GitHub in one repeatable run instead of by hand from a laptop. The maintainer's own 2FA approval on npm is the only gate, and npm, the git tags and GitHub releases always agree.</li>
+      <li id="V1"><b>V1.</b> The same steps every release, with no laptop setup or remembered commands. <small>The maintainer: "automatically publish with GitHub Actions with the manual deployment… create GitHub tags and all that."</small></li>
+      <li id="V2"><b>V2.</b> Nothing reaches npm users without the maintainer's 2FA, even if GitHub, CI or a dependency of the build is compromised. <small>The maintainer chose staged approval on 2026-10-26.</small></li>
+      <li id="V3"><b>V3.</b> No long-lived npm token to leak or rotate, and the flow keeps working after npm ends direct publishing with tokens in January 2027.</li>
+      <li id="V4"><b>V4.</b> A tag or GitHub release never exists for a version that isn't installable from npm. <small>Proposed by the agent; see Q1.</small></li>
+      <li id="V5"><b>V5.</b> Anyone can check which commit of this repository a published version was built from.</li>
+    </ul>
+  </section>
+
+  <section id="flow">
+    <h2>One release, start to finish</h2>
+    <figure>
+      <svg viewBox="0 0 400 152" role="img" aria-labelledby="flowcap">
+        <g font-size="11" text-anchor="middle" fill="var(--fg)">
+          <rect x="2" y="22" width="70" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <text x="37" y="43">Start</text>
+          <rect x="84" y="22" width="70" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <text x="119" y="43">Guard</text>
+          <rect x="166" y="22" width="70" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <text x="201" y="43">Stage</text>
+          <rect x="248" y="22" width="70" height="34" rx="6" fill="var(--surface)" stroke="var(--ok)" stroke-width="2"/>
+          <text x="283" y="43">Approve</text>
+          <rect x="328" y="22" width="70" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+          <text x="363" y="43">Finish</text>
+          <text x="37" y="14" fill="var(--muted)">B1–B2</text>
+          <text x="119" y="14" fill="var(--muted)">B3–B4</text>
+          <text x="201" y="14" fill="var(--muted)">B5–B7</text>
+          <text x="283" y="14" fill="var(--muted)">B8–B9</text>
+          <text x="363" y="14" fill="var(--muted)">B10–B12</text>
+          <text x="119" y="76" fill="var(--muted)">on GitHub</text>
+          <text x="283" y="76" fill="var(--ok)">you, on npm, 2FA</text>
+          <text x="368" y="76" fill="var(--muted)">on GitHub</text>
+          <rect x="166" y="112" width="232" height="34" rx="6" fill="var(--surface)" stroke="var(--warn)"/>
+          <text x="282" y="133">Recover: late approval, rejection (B13–B14)</text>
+        </g>
+        <g stroke="var(--muted)" fill="none">
+          <line x1="72" y1="39" x2="84" y2="39"/><line x1="154" y1="39" x2="166" y2="39"/>
+          <line x1="236" y1="39" x2="248" y2="39"/><line x1="318" y1="39" x2="328" y2="39"/>
+          <line x1="283" y1="84" x2="283" y2="112" stroke-dasharray="3 3"/>
+        </g>
+      </svg>
+      <figcaption id="flowcap"><b>The only step on npm is yours.</b> GitHub starts, checks, stages and finishes the release; your 2FA approval on npm is what makes each package live. Recovery covers an approval that comes late and a release you reject.
+        <details><summary>Data</summary>Start (B1–B2) → Guard (B3–B4) → Stage (B5–B7), on GitHub → Approve, by the maintainer with 2FA on npm (B8–B9) → Finish (B10–B12), on GitHub. Recover (B13–B14) branches from Approve.</details>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="behaviour">
+    <h2>Behaviour</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Group</th><th>What happens</th></tr></thead>
+      <tbody>
+        <tr id="B1"><td>Start</td><td><b>B1.</b> The maintainer starts a release from GitHub by giving one version number, and all three packages are released at that version. <small>Q2: the maintainer types it.</small></td></tr>
+        <tr id="B2"><td>Start</td><td><b>B2.</b> A dry run is the default. It checks and packages the release the same way a real run does, and nothing changes on npm, in git tags or in GitHub releases.</td></tr>
+        <tr id="B3"><td>Guard</td><td><b>B3.</b> A release refuses to start, and says why, when the version isn't valid, a package's changelog has no section for it, the version is already on npm, its tag already exists, or a real (not dry) run isn't from <code>main</code>.</td></tr>
+        <tr id="B4"><td>Guard</td><td><b>B4.</b> Every package as shipped carries the release version and depends on <code>@typewirets/core</code> at exactly that version. <small>The packages ship together (MAINTAINING.md, Release Checklist).</small></td></tr>
+        <tr id="B5"><td>Stage</td><td><b>B5.</b> A real run puts all three packages on npm awaiting approval, and none can be installed yet.</td></tr>
+        <tr id="B6"><td>Stage</td><td><b>B6.</b> The run tells the maintainer what to approve: one entry per package, <code>@typewirets/core</code> first.</td></tr>
+        <tr id="B7"><td>Stage</td><td><b>B7.</b> No npm token is stored in GitHub or anywhere else. Releases keep working with every package set to "require 2FA and disallow tokens" on npm.</td></tr>
+        <tr id="B8"><td>Approve</td><td><b>B8.</b> A package becomes installable only after the maintainer approves it on npm with 2FA, on npmjs.com or from a terminal.</td></tr>
+        <tr id="B9"><td>Approve</td><td><b>B9.</b> A pre-release such as <code>0.2.0-rc.1</code> installs only when asked for by its version or the <code>next</code> tag. A plain <code>npm install @typewirets/core</code> keeps getting the latest stable version.</td></tr>
+        <tr id="B10"><td>Finish</td><td><b>B10.</b> Once all three packages are installable, the <code>v&lt;version&gt;</code> tag, on the commit the release was built from, and the GitHub release appear with no further action. <small>Q1: only after all are live.</small></td></tr>
+        <tr id="B11"><td>Finish</td><td><b>B11.</b> The GitHub release notes are each package's changelog section for that version, and a pre-release is marked as one.</td></tr>
+        <tr id="B12"><td>Finish</td><td><b>B12.</b> Each published version shows provenance that names this repository and the release's commit.</td></tr>
+        <tr id="B13"><td>Recover</td><td><b>B13.</b> If the maintainer approves after the run has stopped waiting, they resume the same release. It then creates the tag and GitHub release, and stages nothing again.</td></tr>
+        <tr id="B14"><td>Recover</td><td><b>B14.</b> If the maintainer rejects a staged package or abandons the release, no tag and no GitHub release are created.<br><small>Whether a rejected version number can be staged again is for the design brief to confirm.</small></td></tr>
+      </tbody>
+    </table></div>
+    <p>How it's built (workflow shape, how the run waits, tools) and the bounds are in the design brief, which comes after this one is approved.</p>
+  </section>
+
+  <section id="answer" class="answer">
+    <h2>Your answer</h2>
+    <form id="answer-form">
+      <fieldset>
+        <legend>Q1. When do the tag and GitHub release appear?</legend>
+        <label><input type="radio" name="Q1" value="A — only after every package is live on npm (keeps V4)" checked> A (recommended): only after every package is live on npm. Keeps V4.</label>
+        <label><input type="radio" name="Q1" value="B — as a draft at staging; the maintainer publishes it after approving"> B: as a draft at staging; you publish it after approving</label>
+        <label><input type="radio" name="Q1" value="C — final at staging (a rejected version would still have a tag)"> C: final at staging (a rejected version would still have a tag)</label>
+      </fieldset>
+      <fieldset>
+        <legend>Q2. Who picks the version?</legend>
+        <label><input type="radio" name="Q2" value="A — the maintainer types it when starting the run" checked> A (recommended): you type it when starting the run; a suggestion can come later</label>
+        <label><input type="radio" name="Q2" value="B — the run proposes one from commits, like typewirepy's /release skill"> B: the run proposes one from commits, like typewirepy's <code>/release</code> skill</label>
+      </fieldset>
+      <fieldset>
+        <legend>Q3. What counts as done? (for the design brief)</legend>
+        <label><input type="radio" name="Q3" value="A — the next real release (likely 0.2.0) ships end to end through this flow" checked> A (recommended): the next real release, likely 0.2.0, ships end to end through this flow</label>
+        <label><input type="radio" name="Q3" value="B — a passing dry run; the first real release is a separate step"> B: a passing dry run; the first real release is a separate step</label>
+      </fieldset>
+      <fieldset>
+        <legend>Approve this product brief (V0–V5, B1–B14)?</legend>
+        <label><input type="radio" name="A" value="approved — go on to the design brief" checked> Approved: go on to the design brief</label>
+        <label><input type="radio" name="A" value="changes needed (see notes)"> Changes needed (say what in the notes)</label>
+      </fieldset>
+      <label for="notes">Anything else?</label>
+      <textarea id="notes" name="notes" placeholder="Optional"></textarea>
+    </form>
+    <p>Copy this and paste it back into the chat:</p>
+    <pre id="answer-text"></pre>
+    <button type="button" id="copy">Copy answer</button>
+  </section>
+
+  <footer>Composed 2026-11-07 by Claude Code using outcome-brief and html-for-humans, from the maintainer's answers in chat (2026-10-23 to 2026-11-07), MAINTAINING.md (Release Checklist), typewirepy's .github/workflows/publish.yml, npm's trusted and staged publishing docs, and the npm registry (0.1.0 is the only published version of each package).</footer>
+</main>
+<script>
+(function(){
+  var form=document.getElementById('answer-form'); if(!form) return;
+  var out=document.getElementById('answer-text'), btn=document.getElementById('copy');
+  var title=document.querySelector('h1').textContent.trim();
+  function build(){
+    var lines=['Answer to: '+title];
+    form.querySelectorAll('fieldset').forEach(function(fs){
+      var picked=fs.querySelector('input:checked');
+      lines.push(fs.querySelector('legend').textContent.trim()+' → '+(picked?picked.value:'(no answer)'));
+    });
+    var notes=form.querySelector('textarea').value.trim();
+    if(notes) lines.push('Notes: '+notes);
+    out.textContent=lines.join('\n');
+  }
+  form.addEventListener('input',build); build();
+  btn.addEventListener('click',function(){
+    var done=function(){btn.textContent='Copied';setTimeout(function(){btn.textContent='Copy answer'},1500)};
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(out.textContent).then(done,function(){selectText()});
+    } else selectText();
+  });
+  function selectText(){var r=document.createRange();r.selectNodeContents(out);var s=getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='Selected, copy it'}
+})();
+</script>
+</body>
+</html>
