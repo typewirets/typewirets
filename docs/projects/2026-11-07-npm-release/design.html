@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Extend the prototype: one workflow stages, waits for approval and tags, and a plan step makes every release resumable</title>
+<style>
+/* Tokens: change values here only. Light first, dark redefines the same names. */
+:root{
+  --bg:#f4f5f7; --surface:#ffffff; --fg:#1a1f27; --muted:#5d6672; --line:#d6dae0;
+  --accent:#2f5fd0; --accent-soft:#e6ecfb;
+  --ok:#1d7a46; --warn:#9a6200; --bad:#b3261e;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+/* Dark: follows the OS unless the viewer picked light; data-theme="dark" forces it. */
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 var(--sans)}
+main{max-width:720px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:28px}
+h1{font-size:1.6rem;line-height:1.2;margin:0;text-wrap:balance}
+h2{font-size:1.15rem;margin:0 0 8px}
+p{margin:0 0 8px}
+small{color:var(--muted)}
+.meta{font:13px/1.4 var(--mono);color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
+.takeaway{background:var(--accent-soft);border-left:4px solid var(--accent);padding:12px 14px;border-radius:0 6px 6px 0;font-weight:600}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+.chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.8rem;font-weight:600;border:1px solid currentColor}
+.chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)}
+figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px}
+figure svg{display:block;width:100%;height:auto}
+figcaption{font-size:.9rem;color:var(--muted);margin-top:8px}
+figcaption b{color:var(--fg)}
+details{margin-top:6px} summary{cursor:pointer}
+fieldset{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:0 0 12px}
+legend{font-weight:600;padding:0 4px}
+label{display:block;padding:4px 0}
+textarea{width:100%;min-height:4.5em;font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px}
+.answer pre{white-space:pre-wrap;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.45 var(--mono)}
+button{font:inherit;font-weight:600;padding:8px 14px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);cursor:pointer}
+button:focus-visible,summary:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+.card.pick{border:2px solid var(--ok)}
+.card h3{font-size:1rem;margin:0 0 6px}
+.card ul{margin:6px 0 0;padding-left:18px}
+footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Extend the prototype: one workflow stages, waits for approval and tags, and a plan step makes every release resumable</h1>
+    <div class="meta"><span>Key: npm-release</span><span>Date: <time datetime="2026-11-07">2026-11-07</time></span><span>Author: Claude Code, with the maintainer</span><span>Status: A1 built; the maintainer said "go ahead and implement" on 2026-11-07</span><span>Source: product.html (approved 2026-11-07), the prototype at 90b8ee6, npm's docs and CLI source</span></div>
+  </header>
+
+  <p class="takeaway">Keep the prototype's shape (one workflow that stages, waits and tags) and add a plan step that reads npm, git and the changelogs before anything is staged. It delivers B1–B16 with the fewest moving parts, and one rule covers every recovery: run the same version again on the same commit.</p>
+
+  <section id="links">
+    <h2>Links</h2>
+    <ul>
+      <li>Serves <a href="product.html">product.html</a>, approved 2026-11-07 with Q1 A, Q2 A and Q3 A. Targets B1–B16.</li>
+      <li>Code: <code>.github/workflows/publish.yml</code>, <code>scripts/release.mjs</code>, <code>scripts/release.test.mjs</code>.</li>
+    </ul>
+  </section>
+
+  <section id="named">
+    <h2>Approaches the maintainer named</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Named</th><th>Outcome</th></tr></thead>
+      <tbody>
+        <tr id="M1"><td><b>M1.</b> npm staged publishing, approved with 2FA<br><small>Against: a required reviewer on a GitHub environment, then a direct <code>npm publish</code>.</small></td><td><span class="chip ok">Kept</span> Only staging keeps V2 if GitHub is compromised, and direct publishing with tokens ends in January 2027.</td></tr>
+        <tr id="M2"><td><b>M2.</b> No version commits on <code>main</code>; the version comes from the run, checked against npm<br><small>Against: bump <code>package.json</code> in a release commit (changesets, release-please).</small></td><td><span class="chip ok">Kept</span> MAINTAINING.md already keeps <code>0.0.0</code>; tags and provenance say which commit is which version.</td></tr>
+        <tr id="M3"><td><b>M3.</b> Replicate typewirepy's flow: manual dispatch, dry run by default, tag and release at the end<br><small>Against: release on a pushed tag.</small></td><td><span class="chip ok">Kept</span> A pushed tag would exist before npm approval, against V4.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="approaches">
+    <h2>Approaches</h2>
+    <div class="cards">
+      <div class="card pick" id="A1"><h3>A1. One workflow, plus a plan step <span class="chip ok">Picked</span></h3>
+        <p>Plan (npm, tags, changelogs, provenance) → stage → poll the registry until live → tag and release.</p>
+        <ul><li>Effort S: extends the prototype.</li><li>Risk: a waiting job holds a runner for up to 3 hours; free on a public repo.</li><li>Recovery: re-run failed jobs, or run the same version again.</li></ul></div>
+      <div class="card" id="A2"><h3>A2. Two workflows</h3>
+        <p>"Stage" ends after staging; a separate "Finish" (dispatched by hand, or on a schedule) tags once all are live.</p>
+        <ul><li>Effort M.</li><li>No runner waits, but every release needs a second click or a cron.</li><li>Twice the trusted-publisher surface to reason about.</li></ul></div>
+      <div class="card" id="A3"><h3>A3. A release tool (semantic-release, changesets)</h3>
+        <p>Let a tool pick versions, write changelogs and publish.</p>
+        <ul><li>Effort M–L.</li><li>Adds npm dependencies to CI (AGENTS.md: a reason and a named sign-off).</li><li>They commit back to <code>main</code> by default, against M2; staged publishing support is unconfirmed.</li></ul></div>
+    </div>
+    <p id="R1"><b>R1.</b> A1. It already exists, keeps one place to look, and its plan step turns every recovery into "run it again": B13 and B15 then need no separate path.</p>
+  </section>
+
+  <section id="shape">
+    <h2>Shape</h2>
+    <figure>
+      <svg viewBox="0 0 400 150" role="img" aria-labelledby="shapecap">
+        <g font-size="11" text-anchor="middle" fill="var(--fg)">
+          <rect x="2" y="20" width="58" height="34" rx="6" fill="var(--surface)" stroke="var(--muted)"/><text x="31" y="41">CI</text>
+          <rect x="72" y="20" width="70" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="107" y="41">Plan</text>
+          <rect x="154" y="20" width="70" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="189" y="41">Stage</text>
+          <rect x="236" y="20" width="70" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="271" y="41">Wait</text>
+          <rect x="318" y="20" width="80" height="34" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/><text x="358" y="41">Tag+release</text>
+          <text x="107" y="70" fill="var(--muted)">npm, tags,</text><text x="107" y="83" fill="var(--muted)">changelogs</text>
+          <text x="189" y="70" fill="var(--muted)">OIDC, only</text><text x="189" y="83" fill="var(--muted)">what's missing</text>
+          <text x="271" y="70" fill="var(--muted)">polls npm,</text><text x="271" y="83" fill="var(--muted)">≤ 3 hours</text>
+          <text x="358" y="70" fill="var(--muted)">GitHub API,</text><text x="358" y="83" fill="var(--muted)">built commit</text>
+          <rect x="154" y="106" width="152" height="30" rx="6" fill="var(--surface)" stroke="var(--ok)" stroke-width="2"/><text x="230" y="125">You approve on npm (2FA)</text>
+        </g>
+        <g stroke="var(--muted)" fill="none"><line x1="60" y1="37" x2="72" y2="37"/><line x1="142" y1="37" x2="154" y2="37"/><line x1="224" y1="37" x2="236" y2="37"/><line x1="306" y1="37" x2="318" y2="37"/><line x1="230" y1="90" x2="230" y2="106" stroke-dasharray="3 3"/></g>
+      </svg>
+      <figcaption id="shapecap"><b>One workflow; the plan decides what the run does.</b> The plan step reads npm, git tags, changelogs and the provenance of anything already live. Staging covers only what isn't live yet, and the tag is created through the API, so nothing is pushed.
+        <details><summary>Data</summary>Jobs: CI (reused ci.yml) → Stage on npm (plan, build, pack, npm stage publish; id-token: write) → Wait for approval on npm (polls the public registry; no permissions; 180-minute timeout) → Tag and GitHub release (provenance check, notes, gh release create on the built commit; contents: write).</details>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="bounds">
+    <h2>Bounds and latitude</h2>
+    <ul>
+      <li id="N1"><b>N1.</b> AGENTS.md holds: SHA-pinned actions from GitHub only, top-level <code>contents: read</code>, no persisted credentials, pnpm from the pinned Corepack, no new dependencies.</li>
+      <li id="N2"><b>N2.</b> Node 22 and Corepack stay as in <code>ci.yml</code>; PR #19 (Node 24, pnpm 12) is separate.</li>
+      <li id="N3"><b>N3.</b> Not now: a version suggested from commits (Q2 B), a release skill, publishing to registries other than npm.</li>
+      <li id="L1"><b>L1.</b> The builder decides the script's structure and the wording of summaries. It checks first before adding any action or dependency, or widening permissions.</li>
+      <li id="L2"><b>L2.</b> Done comes in two stages (Q3 A): this PR is mergeable with every testable line covered, then, after merging, the next real release (likely 0.2.0) ships end to end. A workflow can only be dispatched from <code>main</code>, so stage 2 needs the merge.</li>
+    </ul>
+  </section>
+
+  <section id="calls">
+    <h2>Agent's calls</h2>
+    <ul>
+      <li id="C1"><b>C1.</b> A finishing run must be on the commit the live packages were built from, read from their npm provenance. Otherwise B10 would tag the wrong commit, and B15 would build adapters from different code than their core.</li>
+      <li id="C2"><b>C2.</b> "Higher than npm's latest" compares against the highest version a package has, pre-releases included, so <code>0.2.0-rc.1</code> after <code>0.2.0-rc.2</code> is refused.</li>
+      <li id="C3"><b>C3.</b> The provenance check after release warns and never fails: by then the packages are live, and the tag and release should still follow.</li>
+      <li id="C4"><b>C4.</b> The rules live in exported functions tested with <code>node:test</code>, so the tests need no new dependency.</li>
+    </ul>
+  </section>
+
+  <section id="risks">
+    <h2>Risks and rabbit holes</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>ID</th><th>Risk</th><th>Timebox or mitigation</th></tr></thead>
+      <tbody>
+        <tr id="K1"><td><b>K1</b></td><td>npm unknowns: a stage may expire; a pending stage may block a new stage of the same version; an unapproved first stage may not count as the "first successful publish" that keeps a new trusted publisher alive.</td><td>Settled on the first real release. If staging is refused, reject old stages first (MAINTAINING.md).</td></tr>
+        <tr id="K2"><td><b>K2</b></td><td>The provenance format changes, so finishing a release is refused.</td><td>That fails safe: release a new version, or tag by hand.</td></tr>
+        <tr id="K3"><td><b>K3</b></td><td>The workflow itself can't run before merging; actionlint couldn't be run here.</td><td>The rules that matter are tested as text (T7, T16, T17); the first dry run after merging is the integration test.</td></tr>
+        <tr id="K4"><td><b>K4</b></td><td><code>main</code> has <code>## Unreleased</code> above <code>## 0.1.1</code>, and 0.1.1 was never published.</td><td>Decide 0.1.1 vs 0.2.0 when writing the changelog headings, in the release PR.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="tests">
+    <h2>Test plan</h2>
+    <p>One command, locally and in CI (new step in <code>ci.yml</code>): <code>pnpm test:scripts</code>. "First release" rows are checked by hand on the first real run after merging.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>ID</th><th>Proves</th><th>How</th></tr></thead>
+      <tbody>
+        <tr id="T1"><td><b>T1</b></td><td>B1</td><td>Unit: a new version stages every package; the version replaces the placeholder and nothing else.</td></tr>
+        <tr id="T2"><td><b>T2</b></td><td>B2</td><td>Unit: latest stable and next numbers, also with nothing stable yet. Dry run by default in the workflow.</td></tr>
+        <tr id="T3"><td><b>T3</b></td><td>B3</td><td>Unit: invalid, not higher, no changelog section, tag exists, not on npm. The <code>main</code> check is in the workflow.</td></tr>
+        <tr id="T4"><td><b>T4</b></td><td>B4</td><td>Unit: packed manifests with the right version and exact <code>core</code> pins pass; wrong ones fail. Locally: a 0.1.1 pack against the real registry.</td></tr>
+        <tr id="T5"><td><b>T5</b></td><td>B5, B8</td><td>First release: packages are staged and not installable until approved.</td></tr>
+        <tr id="T6"><td><b>T6</b></td><td>B6</td><td>Unit: <code>core</code> is ordered first. First release: the summary lists one approve command per package.</td></tr>
+        <tr id="T7"><td><b>T7</b></td><td>B7</td><td>Unit, on the workflow text: no secrets and no npm token.</td></tr>
+        <tr id="T9"><td><b>T9</b></td><td>B9</td><td>Unit: a pre-release goes to <code>next</code>, a release to <code>latest</code>.</td></tr>
+        <tr id="T10"><td><b>T10</b></td><td>B10</td><td>Unit: finishing is refused from a different commit. First release: the tag points at the built commit.</td></tr>
+        <tr id="T11"><td><b>T11</b></td><td>B11</td><td>Unit: notes are each package's section; an empty or missing section doesn't count.</td></tr>
+        <tr id="T12"><td><b>T12</b></td><td>B12</td><td>Unit: the commit is read from a provenance statement. First release: <code>verify</code> reports each package.</td></tr>
+        <tr id="T13"><td><b>T13</b></td><td>B13</td><td>Unit: live everywhere but untagged stages nothing and goes on to tag.</td></tr>
+        <tr id="T14"><td><b>T14</b></td><td>B14</td><td>Unit: a version that was never approved can be released again.</td></tr>
+        <tr id="T15"><td><b>T15</b></td><td>B15</td><td>Unit: partly live stages only what's missing; a finished release is refused.</td></tr>
+        <tr id="T16"><td><b>T16</b></td><td>B16</td><td>Unit, on the workflow text: no <code>git commit</code> or <code>git push</code>.</td></tr>
+        <tr id="T17"><td><b>T17</b></td><td>N1</td><td>Unit, on the workflow text: SHA pins, no persisted credentials, <code>contents: read</code> at the top.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="open">
+    <h2>Open</h2>
+    <ul>
+      <li id="Q4"><b>Q4.</b> The npm unknowns in K1. Accepted as open: they can only be settled on npm itself.</li>
+    </ul>
+  </section>
+
+  <section id="left">
+    <h2>Left to the builder</h2>
+    <ul>
+      <li>File layout, function names and the wording of run summaries and errors.</li>
+      <li>How long the wait job polls, within GitHub's 6-hour job limit.</li>
+    </ul>
+  </section>
+
+  <footer>Composed 2026-11-07 by Claude Code using outcome-brief and html-for-humans, from product.html (approved), the prototype at 90b8ee6, AGENTS.md, MAINTAINING.md, npm's trusted and staged publishing docs, the npm 11.21.1 CLI source, and a provenance statement read from the npm registry (vite 8.3.6).</footer>
+</main>
+</body>
+</html>

@@ -45,7 +45,7 @@ Framework packages should declare the framework as a **`peerDependency`** with a
 3. Run `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm build`, `pnpm check-types` and `pnpm test`.
 4. Publish all three packages from the same commit with `pnpm publish`, never `npm publish` from a package folder. Only pnpm rewrites `workspace:*` into the release version, so `npm publish` would ship adapters that depend on `"@typewirets/core": "workspace:*"`, which can't be installed.
 
-When the **Publish to npm** workflow lands, it replaces steps 2 to 4. It sets the versions, packs the packages with `pnpm pack` and stages them on npm, so follow its "Releasing" section instead. Every package still gets a changelog heading (step 1), and the packages still ship together.
+The **Publish to npm** workflow does steps 2 to 4: it sets the versions for the run only, packs the packages with `pnpm pack` and stages them on npm. Follow [Releasing](#releasing) for it. Every package still gets a changelog heading (step 1), and the packages still ship together.
 
 ## Package Metadata Checklist
 
@@ -58,14 +58,14 @@ Every publishable package (`packages/core`, `packages/inversify`, `packages/reac
 
 ## Releasing
 
-All publishable packages are released together at one version by the **Publish to npm** workflow (`.github/workflows/publish.yml`). Package versions stay at `0.0.0` in git; the workflow writes the release version into each package at release time.
+All publishable packages are released together at one version by the **Publish to npm** workflow (`.github/workflows/publish.yml`). Package versions stay at `0.0.0` in git. The workflow writes the release version into each package inside the run only, and never commits to the repository: a released version lives on npm and in its `v<version>` tag. The product brief behind it is in [docs/projects/2026-11-07-npm-release](docs/projects/2026-11-07-npm-release/README.md).
 
 The workflow publishes with npm [trusted publishing](https://docs.npmjs.com/trusted-publishers) (OIDC), so there is no npm token in GitHub. It uses [staged publishing](https://docs.npmjs.com/staged-publishing): CI uploads each package to a private staging area, and nothing is public until a maintainer approves it on npm with 2FA.
 
 ### Releasing a version
 
-1. On `main`, give each publishable package's `CHANGELOG.md` a `## <version>` section. The workflow refuses to run without one, and the GitHub release notes are built from these sections.
-2. Run **Publish to npm** from the Actions tab on `main` with the version and **dry-run** checked. It runs CI, builds, packs and checks every tarball, and stages nothing.
+1. On `main`, give each publishable package's `CHANGELOG.md` a `## <version>` section, in an ordinary pull request. The workflow refuses to run without one, and the GitHub release notes are built from these sections.
+2. Run **Publish to npm** from the Actions tab on `main` with the version and **dry-run** checked. It runs CI, checks the version, builds, packs and checks every tarball, and stages nothing. Its summary shows the latest version on npm and the next patch, minor and major numbers. It refuses a version that isn't higher than npm's latest, lacks a changelog section, or is already tagged.
 3. Run it again with **dry-run** unchecked. When the **Stage on npm** job finishes, its summary lists one `npm stage approve <stage-id>` command per package.
 4. Approve each package with 2FA, `@typewirets/core` first, because the other packages pin it to the exact version:
    - on npmjs.com, in the **Staged Packages** tab, or
@@ -79,7 +79,8 @@ Versions with a pre-release suffix (e.g. `0.2.0-rc.1`) are published under the `
 ### If something goes wrong
 
 - **The wait job timed out (after 3 hours).** Approve the packages on npm, then use **Re-run failed jobs** on the run. That re-runs only the wait and release jobs; nothing is staged again.
-- **You don't want to release what was staged.** Reject each stage (`npm stage reject <stage-id>`) and cancel the run. No tag or GitHub release is created until every package is live.
+- **You don't want to release what was staged.** Reject each stage (`npm stage reject <stage-id>`) and cancel the run. No tag or GitHub release is created until every package is live, and the same version can be released again later.
+- **Only some packages went live** (for example, you approved `@typewirets/core` and rejected the others). If the other stages are still pending, approve them and re-run the original run. Otherwise start a new run with the same version, on the same commit: it stages only the packages that aren't live yet, then tags and releases. It refuses if `main` has moved past the commit the live packages were built from (read from their npm provenance), because the packages would then be built from different code; release a new version instead.
 - **Staging failed partway.** Reject the packages that did get staged before starting a new run.
 
 ### One-time setup
