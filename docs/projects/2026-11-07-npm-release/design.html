@@ -124,7 +124,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
         <g stroke="var(--muted)" fill="none"><line x1="60" y1="37" x2="72" y2="37"/><line x1="142" y1="37" x2="154" y2="37"/><line x1="224" y1="37" x2="236" y2="37"/><line x1="306" y1="37" x2="318" y2="37"/><line x1="230" y1="90" x2="230" y2="106" stroke-dasharray="3 3"/></g>
       </svg>
       <figcaption id="shapecap"><b>One workflow; the plan decides what the run does.</b> The plan step reads npm, git tags, changelogs and the provenance of anything already live. Staging covers only what isn't live yet, and the tag is created through the API, so nothing is pushed.
-        <details><summary>Data</summary>Jobs: CI (reused ci.yml) → Stage on npm (plan, build, pack, npm stage publish; id-token: write) → Wait for approval on npm (polls the public registry; no permissions; 180-minute timeout) → Tag and GitHub release (provenance check, notes, gh release create on the built commit; contents: write).</details>
+        <details><summary>Data</summary>Jobs: CI (reused ci.yml) → Plan, build and pack (contents: read; uploads the tarballs) → Stage on npm (id-token: write; no checkout, only npm stage publish on the downloaded tarballs) → Wait for approval on npm (polls the public registry; no permissions; gives up after 170 minutes) → Tag and GitHub release (provenance check, notes, tag re-check, gh release create on the built commit; contents: write).</details>
       </figcaption>
     </figure>
   </section>
@@ -132,7 +132,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
   <section id="bounds">
     <h2>Bounds and latitude</h2>
     <ul>
-      <li id="N1"><b>N1.</b> AGENTS.md holds: SHA-pinned actions from GitHub only, top-level <code>contents: read</code>, no persisted credentials, pnpm from the pinned Corepack, no new dependencies.</li>
+      <li id="N1"><b>N1.</b> AGENTS.md holds: SHA-pinned actions from GitHub only (checkout, setup-node, upload-artifact, download-artifact), top-level <code>contents: read</code>, no persisted credentials, pnpm from the pinned Corepack, no new dependencies.</li>
       <li id="N2"><b>N2.</b> Node 22 and Corepack stay as in <code>ci.yml</code>; PR #19 (Node 24, pnpm 12) is separate.</li>
       <li id="N3"><b>N3.</b> Not now: a version suggested from commits (Q2 B), a release skill, publishing to registries other than npm.</li>
       <li id="L1"><b>L1.</b> The builder decides the script's structure and the wording of summaries. It checks first before adding any action or dependency, or widening permissions.</li>
@@ -147,6 +147,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
       <li id="C2"><b>C2.</b> "Higher than npm's latest" compares against the highest version a package has, pre-releases included, so <code>0.2.0-rc.1</code> after <code>0.2.0-rc.2</code> is refused.</li>
       <li id="C3"><b>C3.</b> The provenance check after release warns and never fails: by then the packages are live, and the tag and release should still follow.</li>
       <li id="C4"><b>C4.</b> The rules live in exported functions tested with <code>node:test</code>, so the tests need no new dependency.</li>
+      <li id="C5"><b>C5.</b> Only the stage job can get the npm token, and it runs no repository or dependency code: a build job without the token plans, builds and packs, and hands the tarballs over through GitHub's artifact actions. A compromised build tool can then neither publish nor stage.</li>
     </ul>
   </section>
 
@@ -185,6 +186,7 @@ footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--l
         <tr id="T15"><td><b>T15</b></td><td>B15</td><td>Unit: partly live stages only what's missing; a finished release is refused.</td></tr>
         <tr id="T16"><td><b>T16</b></td><td>B16</td><td>Unit, on the workflow text: no <code>git commit</code> or <code>git push</code>.</td></tr>
         <tr id="T17"><td><b>T17</b></td><td>N1</td><td>Unit, on the workflow text: SHA pins, no persisted credentials, <code>contents: read</code> at the top.</td></tr>
+        <tr id="T18"><td><b>T18</b></td><td>V2, C5</td><td>Unit, on the workflow text: only the stage job has <code>id-token: write</code>, and it has no checkout, pnpm or repository script. The release job checks the tag again before creating it (B10).</td></tr>
       </tbody>
     </table></div>
   </section>

@@ -5,30 +5,13 @@
 //
 // Usage, after `pnpm build`:
 //   node scripts/check-cjs-entry-points.mjs
-import { readFileSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const packagesDir = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "../packages",
-);
+import { workspacePackages } from "./workspace-packages.mjs";
 
 let checked = 0;
 const failures = [];
 
-for (const dir of readdirSync(packagesDir, { withFileTypes: true })) {
-  if (!dir.isDirectory()) continue;
-
-  const manifestPath = join(packagesDir, dir.name, "package.json");
-  let manifest;
-  try {
-    manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  } catch {
-    continue;
-  }
-
+for (const { manifestPath, manifest } of workspacePackages()) {
   if (typeof manifest.exports?.["."]?.require !== "string") continue;
 
   checked += 1;

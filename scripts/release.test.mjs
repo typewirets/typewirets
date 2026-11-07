@@ -305,7 +305,7 @@ describe("packages as shipped", () => {
     const text =
       '{\n  "name": "@typewirets/core",\n  "version": "0.0.0",\n  "files": ["dist"]\n}\n';
     assert.equal(
-      withVersion(text, "0.2.0"),
+      withVersion({ manifestText: text, version: "0.2.0" }),
       '{\n  "name": "@typewirets/core",\n  "version": "0.2.0",\n  "files": ["dist"]\n}\n',
     );
   });
@@ -379,18 +379,24 @@ describe("release notes", () => {
   ].join("\n");
 
   test("B11: the notes are each package's section for that version", () => {
-    const section = changelogSection(changelog, "0.2.0");
+    const section = changelogSection({ changelog, version: "0.2.0" });
     assert.equal(section, "- **New:** `preload`.\n\n### Notes\n\n- Detail.");
     assert.equal(
-      releaseNotes("0.2.0", [{ name: "@typewirets/core", section }]),
+      releaseNotes({
+        version: "0.2.0",
+        sections: [{ name: "@typewirets/core", section }],
+      }),
       "# v0.2.0\n\n## @typewirets/core\n\n- **New:** `preload`.\n\n### Notes\n\n- Detail.\n",
     );
   });
 
   test("B3/B11: an Unreleased-only or empty section doesn't count as a section", () => {
-    assert.equal(changelogSection(changelog, "0.3.0"), undefined);
+    assert.equal(changelogSection({ changelog, version: "0.3.0" }), undefined);
     assert.equal(
-      changelogSection("## 0.3.0\n\n## 0.2.0\n- x", "0.3.0"),
+      changelogSection({
+        changelog: "## 0.3.0\n\n## 0.2.0\n- x",
+        version: "0.3.0",
+      }),
       undefined,
     );
   });
@@ -402,6 +408,41 @@ describe("the publish workflow", () => {
     "utf8",
   );
   const steps = workflow.split("\n");
+
+  // Each job's text, keyed by its id: the lines under `jobs:` from one
+  // two-space-indented key to the next.
+  const jobs = {};
+  let current;
+  for (const line of workflow
+    .slice(workflow.indexOf("\njobs:\n"))
+    .split("\n")) {
+    const header = /^ {2}([a-z-]+):$/.exec(line);
+    if (header) {
+      current = header[1];
+      jobs[current] = "";
+    } else if (current) {
+      jobs[current] += `${line}\n`;
+    }
+  }
+
+  test("V2: only a job that runs no repository or dependency code can get the npm token", () => {
+    const withToken = Object.entries(jobs).filter(([, text]) =>
+      /id-token: write/.test(text),
+    );
+    assert.deepEqual(
+      withToken.map(([id]) => id),
+      ["stage"],
+    );
+    const [, stage] = withToken[0];
+    assert.doesNotMatch(stage, /actions\/checkout|pnpm|scripts\//);
+  });
+
+  test("B10: the tag is checked again right before the release creates it", () => {
+    const release = jobs.release;
+    const check = release.indexOf("git/ref/tags/v$VERSION");
+    assert.ok(check > 0);
+    assert.ok(check < release.indexOf("gh release create"));
+  });
 
   test("B7: no npm token or other secret is used", () => {
     assert.doesNotMatch(workflow, /secrets\./);

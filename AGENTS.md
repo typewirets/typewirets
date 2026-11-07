@@ -26,6 +26,8 @@ Before adding an action, check its Marketplace listing yourself. Confirm the own
 | `actions/checkout` | GitHub | Verified creator | |
 | `actions/setup-node` | GitHub | Verified creator | |
 | `actions/cache` | GitHub | Verified creator | |
+| `actions/upload-artifact` | GitHub | Verified creator | |
+| `actions/download-artifact` | GitHub | Verified creator | |
 
 There are no exceptions today. pnpm is installed with a `run:` step (a pinned `corepack` from npm, which checks the `packageManager` hash) rather than the unverified `pnpm/action-setup`.
 

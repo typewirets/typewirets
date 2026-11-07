@@ -3,7 +3,7 @@
 The maintainer releases `@typewirets/core`, `@typewirets/inversify` and `@typewirets/react` from GitHub in one run, at one version. Each package goes live only after the maintainer approves it on npm with 2FA, and the tag and GitHub release follow. No npm token is stored anywhere.
 
 - [product.html](product.html): value V0–V6, behaviour B1–B16. Status: approved 2026-11-07 with Q1 A (tag and release only once all are live), Q2 A (the maintainer types the version; npm guards it), Q3 A (done when the next real release ships end to end).
-- [design.html](design.html): approaches M1–M3, A1–A3; picked A1 (one workflow plus a plan step); calls C1–C4; test plan T1–T17. Status: A1 built 2026-11-07, after the maintainer's "go ahead and implement".
+- [design.html](design.html): approaches M1–M3, A1–A3; picked A1 (one workflow plus a plan step); calls C1–C5; test plan T1–T18. Status: A1 built 2026-11-07, after the maintainer's "go ahead and implement".
 
 ## Where things stand
 
@@ -17,6 +17,7 @@ The maintainer releases `@typewirets/core`, `@typewirets/inversify` and `@typewi
 - 2026-11-07: the maintainer keeps Node 22 in CI and the pinned Corepack from #26; PR #19 (Node 24 minimum, pnpm 12) is theirs to revisit separately.
 - 2026-11-07: product brief approved. Built A1 on PR #23: `scripts/release.mjs` plans each release from npm, git tags, changelogs and provenance; `scripts/release.test.mjs` covers the rules (`pnpm test:scripts`, also in CI); `publish.yml` now follows AGENTS.md. Finishing a partly live release is allowed only from the commit its live packages were built from (C1).
 - 2026-11-07: the maintainer noted Q3 can only be met after merging: a workflow can only be dispatched from `main`.
+- 2026-11-07: after a code review, the maintainer asked for all seven findings to be fixed: building and packing moved to a job without the npm token, and the job that holds it runs no repository or dependency code (C5); dry runs no longer share the release's concurrency group; the wait job ends with a clear message before its timeout, including after a rejection; the tag is checked again right before it is created; npm's abbreviated metadata; one shared package list (`scripts/workspace-packages.mjs`); named parameters for multi-argument exports.
 
 ## Open
 
@@ -26,6 +27,6 @@ The maintainer releases `@typewirets/core`, `@typewirets/inversify` and `@typewi
 ## Next steps
 
 1. Merge PR #23 once CI is green (stage 1 of done).
-2. One-time setup, by the maintainer (MAINTAINING.md, "One-time setup"): GitHub environments `npm` and `dry-run`; a trusted publisher per package on npmjs.com, added right before the first real release.
+2. One-time setup, by the maintainer (MAINTAINING.md, "One-time setup"): the GitHub environment `npm`; a trusted publisher per package on npmjs.com, added right before the first real release.
 3. A changelog PR that moves `## Unreleased` under the release version in all three packages.
 4. Run **Publish to npm** as a dry run, then for real; approve on npm; check that the tag, the GitHub release and provenance appear (stage 2 of done, T5, T6, T10, T12).

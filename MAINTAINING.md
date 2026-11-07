@@ -66,7 +66,7 @@ The workflow publishes with npm [trusted publishing](https://docs.npmjs.com/trus
 
 1. On `main`, give each publishable package's `CHANGELOG.md` a `## <version>` section, in an ordinary pull request. The workflow refuses to run without one, and the GitHub release notes are built from these sections.
 2. Run **Publish to npm** from the Actions tab on `main` with the version and **dry-run** checked. It runs CI, checks the version, builds, packs and checks every tarball, and stages nothing. Its summary shows the latest version on npm and the next patch, minor and major numbers. It refuses a version that isn't higher than npm's latest, lacks a changelog section, or is already tagged.
-3. Run it again with **dry-run** unchecked. When the **Stage on npm** job finishes, its summary lists one `npm stage approve <stage-id>` command per package.
+3. Run it again with **dry-run** unchecked. Real releases run one at a time; dry runs never wait behind them. When the **Stage on npm** job finishes, its summary lists one `npm stage approve <stage-id>` command per package.
 4. Approve each package with 2FA, `@typewirets/core` first, because the other packages pin it to the exact version:
    - on npmjs.com, in the **Staged Packages** tab, or
    - from a terminal where you are logged in: `npm stage approve <stage-id>` (npm prompts for your one-time code).
@@ -78,14 +78,14 @@ Versions with a pre-release suffix (e.g. `0.2.0-rc.1`) are published under the `
 
 ### If something goes wrong
 
-- **The wait job timed out (after 3 hours).** Approve the packages on npm, then use **Re-run failed jobs** on the run. That re-runs only the wait and release jobs; nothing is staged again.
+- **The wait job gave up (after about 3 hours).** Approve the packages on npm, then use **Re-run failed jobs** on the run. That re-runs only the wait and release jobs; nothing is staged again.
 - **You don't want to release what was staged.** Reject each stage (`npm stage reject <stage-id>`) and cancel the run. No tag or GitHub release is created until every package is live, and the same version can be released again later.
 - **Only some packages went live** (for example, you approved `@typewirets/core` and rejected the others). If the other stages are still pending, approve them and re-run the original run. Otherwise start a new run with the same version, on the same commit: it stages only the packages that aren't live yet, then tags and releases. It refuses if `main` has moved past the commit the live packages were built from (read from their npm provenance), because the packages would then be built from different code; release a new version instead.
 - **Staging failed partway.** Reject the packages that did get staged before starting a new run.
 
 ### One-time setup
 
-- **GitHub:** create the environments `npm` and `dry-run` (Settings → Environments). Limit `npm` to the `main` branch under deployment branches.
+- **GitHub:** create the environment `npm` (Settings → Environments) and limit it to the `main` branch under deployment branches. Only the **Stage on npm** job uses it. That job is the only one that can get the npm token, and it runs no repository or dependency code: it stages the tarballs the build job packed.
 - **npm:** for each publishable package, open Settings → Trusted publishing on npmjs.com and add a GitHub Actions publisher: organization `typewirets`, repository `typewirets`, workflow `publish.yml`, environment `npm`. Leave the allowed actions at `npm stage publish` only. A new configuration expires unless it is used for a successful publish within 2 days, so add it right before the first release that uses it.
 - **npm, after the first successful release:** set each package's publishing access to **Require two-factor authentication and disallow tokens**. Trusted publishing keeps working.
 - **New packages:** trusted publishing can only be set up for a package that already exists on npm, so publish a new package's first version by hand, then add the trusted publisher.

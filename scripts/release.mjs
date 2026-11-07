@@ -24,16 +24,12 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  readdirSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { workspacePackages } from "./workspace-packages.mjs";
 
-const packagesDir = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "../packages",
-);
 const dependencyFields = [
   "dependencies",
   "peerDependencies",
@@ -54,6 +50,7 @@ export function parseVersion(version) {
 }
 
 // Semver precedence: negative when a < b, 0 when equal, positive when a > b.
+// Positional on purpose: it is an Array.prototype.sort comparator.
 export function compareVersions(a, b) {
   const x = parseVersion(a);
   const y = parseVersion(b);
@@ -183,7 +180,7 @@ export function planRelease({ version, packages, tagExists, commit }) {
   return plan;
 }
 
-export function withVersion(manifestText, version) {
+export function withVersion({ manifestText, version }) {
   return manifestText.replace(
     /"version":\s*"[^"]*"/,
     `"version": "${version}"`,
@@ -209,7 +206,7 @@ export function checkPackedManifest({ manifest, version, siblings }) {
   return problems;
 }
 
-export function changelogSection(changelog, version) {
+export function changelogSection({ changelog, version }) {
   const lines = changelog.split("\n");
   const start = lines.findIndex((line) => line.trim() === `## ${version}`);
   if (start === -1) return undefined;
@@ -221,7 +218,7 @@ export function changelogSection(changelog, version) {
   return section || undefined;
 }
 
-export function releaseNotes(version, sections) {
+export function releaseNotes({ version, sections }) {
   const parts = sections.map(({ name, section }) => `## ${name}\n\n${section}`);
   return `# v${version}\n\n${parts.join("\n\n")}\n`;
 }
@@ -258,15 +255,7 @@ function fail(message) {
 }
 
 function publishablePackages() {
-  const packages = [];
-  for (const dir of readdirSync(packagesDir, { withFileTypes: true })) {
-    if (!dir.isDirectory()) continue;
-    const manifestPath = join(packagesDir, dir.name, "package.json");
-    if (!existsSync(manifestPath)) continue;
-    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-    if (manifest.private) continue;
-    packages.push({ dir: join(packagesDir, dir.name), manifestPath, manifest });
-  }
+  const packages = workspacePackages().filter((p) => !p.manifest.private);
   const order = publishOrder(packages.map((p) => p.manifest));
   return order.map((m) => packages.find((p) => p.manifest === m));
 }
@@ -277,8 +266,10 @@ function readChangelog(pkg) {
 }
 
 async function npmVersions(name) {
+  // The abbreviated metadata lists every version without their manifests.
   const res = await fetch(
     `https://registry.npmjs.org/${name.replace("/", "%2f")}`,
+    { headers: { Accept: "application/vnd.npm.install-v1+json" } },
   );
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`${name}: npm registry returned ${res.status}`);
@@ -305,11 +296,18 @@ function headCommit() {
 }
 
 function tagExists(version) {
-  const out = execFileSync(
-    "git",
-    ["ls-remote", "--tags", "origin", `refs/tags/v${version}`],
-    { encoding: "utf8" },
-  );
+  let out;
+  try {
+    out = execFileSync(
+      "git",
+      ["ls-remote", "--tags", "origin", `refs/tags/v${version}`],
+      { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
+    );
+  } catch (err) {
+    throw new Error(
+      `Couldn't check the git tags on origin: ${err.stderr?.trim() || err.message}`,
+    );
+  }
   return out.trim() !== "";
 }
 
@@ -334,26 +332,33 @@ function planSummary(plan) {
 async function prepare(version, outDir) {
   const packages = publishablePackages();
   const valid = Boolean(parseVersion(version));
-  const plan = planRelease({
-    version,
-    packages: await Promise.all(
-      packages.map(async (pkg) => {
-        const { name } = pkg.manifest;
-        const versions = await npmVersions(name);
-        return {
-          name,
-          versions,
-          hasChangelog: Boolean(changelogSection(readChangelog(pkg), version)),
-          liveCommit:
-            valid && versions?.includes(version)
-              ? await publishedCommit(name, version)
-              : undefined,
-        };
-      }),
-    ),
-    tagExists: valid ? tagExists(version) : false,
-    commit: headCommit(),
-  });
+  let plan;
+  try {
+    plan = planRelease({
+      version,
+      packages: await Promise.all(
+        packages.map(async (pkg) => {
+          const { name } = pkg.manifest;
+          const versions = await npmVersions(name);
+          return {
+            name,
+            versions,
+            hasChangelog: Boolean(
+              changelogSection({ changelog: readChangelog(pkg), version }),
+            ),
+            liveCommit:
+              valid && versions?.includes(version)
+                ? await publishedCommit(name, version)
+                : undefined,
+          };
+        }),
+      ),
+      tagExists: valid ? tagExists(version) : false,
+      commit: headCommit(),
+    });
+  } catch (err) {
+    fail(`Refused: ${err.message}`);
+  }
 
   const summary = planSummary(plan);
   console.log(summary);
@@ -368,7 +373,10 @@ async function prepare(version, outDir) {
   for (const pkg of packages) {
     writeFileSync(
       pkg.manifestPath,
-      withVersion(readFileSync(pkg.manifestPath, "utf8"), version),
+      withVersion({
+        manifestText: readFileSync(pkg.manifestPath, "utf8"),
+        version,
+      }),
     );
   }
 }
@@ -431,12 +439,15 @@ async function verify(version) {
 
 function notes(version) {
   const sections = publishablePackages().map((pkg) => {
-    const section = changelogSection(readChangelog(pkg), version);
+    const section = changelogSection({
+      changelog: readChangelog(pkg),
+      version,
+    });
     if (!section)
       fail(`${pkg.manifest.name}: CHANGELOG.md has no "## ${version}" section`);
     return { name: pkg.manifest.name, section };
   });
-  process.stdout.write(releaseNotes(version, sections));
+  process.stdout.write(releaseNotes({ version, sections }));
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
