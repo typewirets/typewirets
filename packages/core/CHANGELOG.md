@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0-rc.1
 
 - **New: `container.preload(opts?)` creates singletons ahead of time,** so they can be read with `getInstanceSync` afterwards. Without options it creates every singleton bound at the time of the call; with `{ wires }`, only those wires and their imports. Creations run in parallel, wires that aren't singletons are skipped, and values already created are kept, so a later call creates only what is new. A failure rejects with that creation's own error, and the other creations still finish and are cached. New type: `PreloadOpts`. See "Preloading" in the README.
 - **`container.getAllAsync()` is deprecated** in favour of `preload`. It resolves bindings one at a time and also creates a value for every transient binding. It still works.
@@ -10,7 +10,7 @@
 - A test now pins that a value still being created when a wire is re-applied is kept ([#17](https://github.com/typewirets/typewirets/issues/17)).
 - **Node.js 22 or later is required.** `engines.node` is now `>=22`, because Node.js 20 reached end-of-life on 30 April 2026. CI tests Node.js 22, 24 and 26.
 
-## 0.1.1
+### Also in this release: changes prepared as 0.1.1, which was never published
 
 Fixes three singleton-cache behaviours that diverged from the typewire contract shared with the Python and Go ports, and fixes loading the package with CommonJS `require()`.
 
@@ -19,7 +19,7 @@ Fixes three singleton-cache behaviours that diverged from the typewire contract 
 - **An override of an import applied after the importer is cached leaves the importer's value alone.** Because of the same `apply` change, the import keeps the instance already built through the importer, so callers that hold the importer and callers that resolve the import directly get the same value.
 - **CommonJS `require()` works.** The package is `"type": "module"`, so Node loaded the CommonJS build in `dist/cjs` as an ES module: `require()` from plain Node (TypeScript compiled to CommonJS, ts-node) threw `ReferenceError: exports is not defined`. Bundlers, Jest and ESM `import` were not affected. The build now writes `dist/cjs/package.json` with `{"type":"commonjs"}`.
 
-### Notes for `BindingContext` implementers
+#### Notes for `BindingContext` implementers
 
 - `bind` must replace an existing binding for the same type, because `apply` no longer unbinds first. Its return type is now `void | Promise<void>`, and `apply` awaits it.
 - The Inversify adapter's `bind` now does the unbind itself, so its behaviour is unchanged: re-applying still discards Inversify's cached instance.
