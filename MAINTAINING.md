@@ -52,7 +52,7 @@ The **Publish to npm** workflow does steps 2 to 4: it sets the versions for the 
 Every publishable package (`packages/core`, `packages/inversify`, `packages/react`) should include:
 
 - `"sideEffects": false` — enables tree-shaking in bundlers
-- `"engines": { "node": ">=22" }` — documents the minimum supported Node.js version (the oldest Node.js LTS line still in support; raise it when that line reaches end-of-life, and keep the CI matrix in `.github/workflows/ci.yml` on every supported LTS line)
+- `"engines": { "node": ">=22" }` — documents the minimum supported Node.js version (the oldest Node.js LTS line still in support; raise it when that line reaches end-of-life, and keep the CI matrix in `.github/workflows/ci.yml` on every supported LTS line). The dev shell in `flake.nix` and the jobs in `.github/workflows/publish.yml` use the active LTS line, now 26
 - `"exports"` with `types`, `import`, and `require` conditions — supports both ESM and CJS consumers
 - `"files"` array — limits what gets published to npm
 

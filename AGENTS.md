@@ -29,7 +29,7 @@ Before adding an action, check its Marketplace listing yourself. Confirm the own
 | `actions/upload-artifact` | GitHub | Verified creator | |
 | `actions/download-artifact` | GitHub | Verified creator | |
 
-There are no exceptions today. pnpm is installed with a `run:` step (a pinned `corepack` from npm, which checks the `packageManager` hash) rather than the unverified `pnpm/action-setup`.
+There are no exceptions today. pnpm is installed with a `run:` step, `node scripts/setup-pnpm.mjs`, rather than the unverified `pnpm/action-setup`. npm installs the `packageManager` version with scripts off, and the script refuses it unless every package matches the hashes in `pnpm-lock.yaml`. Don't bring back Corepack: Node.js 25 and later don't bundle it.
 
 ### GitHub Actions: pin to a full commit SHA
 
