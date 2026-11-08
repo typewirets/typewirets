@@ -29,10 +29,11 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, join, relative, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { workspacePackages } from "./workspace-packages.mjs";
 
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dependencyFields = [
   "dependencies",
   "peerDependencies",
@@ -308,6 +309,20 @@ function readChangelog(pkg) {
   return existsSync(path) ? readFileSync(path, "utf8") : "";
 }
 
+// A package's changelog as it is at a git ref, so a suggestion for origin/main
+// doesn't depend on the branch that happens to be checked out.
+function changelogAt(pkg, ref) {
+  const path = relative(repoRoot, join(pkg.dir, "CHANGELOG.md"));
+  try {
+    return execFileSync("git", ["show", `${ref}:${path}`], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+  } catch {
+    return "";
+  }
+}
+
 async function npmVersions(name) {
   // The abbreviated metadata lists every version without their manifests.
   const res = await fetch(
@@ -535,13 +550,14 @@ async function suggest(ref) {
     "Changelogs:",
   ];
   for (const pkg of packages) {
-    const changelog = readChangelog(pkg);
+    const changelog = changelogAt(pkg, ref);
     const unreleased = changelogSection({ changelog, version: "Unreleased" });
+    const [newest] = changelogVersions(changelog);
     const heading = suggestion.version
       ? changelogSection({ changelog, version: suggestion.version })
       : undefined;
     lines.push(
-      `- ${pkg.manifest.name}: ${heading ? `has "## ${suggestion.version}"` : unreleased ? 'entries under "## Unreleased"' : "no entries"}`,
+      `- ${pkg.manifest.name}: ${heading ? `has "## ${suggestion.version}"` : unreleased ? 'entries under "## Unreleased"' : newest ? `newest section is "## ${newest}"` : "no entries"}`,
     );
     const neverPublished = changelogVersions(changelog).filter(
       (v) => !published.has(v) && v !== suggestion.version,
