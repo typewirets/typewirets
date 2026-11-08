@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import {
   changelogSection,
+  changelogStatus,
   changelogVersions,
   checkPackedManifest,
   commitImpact,
@@ -134,6 +135,35 @@ describe("suggesting the next version (release skill)", () => {
   test("the latest version ignores pre-releases", () => {
     assert.equal(latestStable(["0.1.0", "0.2.0-rc.1", "0.1.1"]), "0.1.1");
     assert.equal(latestStable(["0.2.0-rc.1"]), undefined);
+  });
+
+  test("reports whether a changelog is ready for the suggested version", () => {
+    const status = (changelog, version = "0.2.0") =>
+      changelogStatus({
+        changelog,
+        version,
+        published: ["0.1.0", "0.2.0-rc.1"],
+      });
+    assert.deepEqual(status("## 0.2.0\n\n- New.\n\n## 0.1.0\n\n- Initial."), {
+      state: 'has "## 0.2.0"',
+      neverPublished: [],
+    });
+    assert.deepEqual(
+      status("## Unreleased\n\n- New.\n\n## 0.1.1\n\n- Fix.\n\n## 0.1.0\n"),
+      {
+        state: 'entries under "## Unreleased"',
+        neverPublished: ["0.1.1"],
+      },
+    );
+    assert.deepEqual(status("## 0.2.0-rc.1\n\n- New.\n\n## 0.1.0\n"), {
+      state: 'newest section is "## 0.2.0-rc.1"',
+      neverPublished: [],
+    });
+    assert.deepEqual(status(""), { state: "no entries", neverPublished: [] });
+    assert.deepEqual(status("## 0.1.0\n\n- Initial.", null), {
+      state: 'newest section is "## 0.1.0"',
+      neverPublished: [],
+    });
   });
 
   test("finds every version heading in a changelog", () => {
