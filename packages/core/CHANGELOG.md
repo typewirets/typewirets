@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0-rc.1
+## 0.2.0
 
 - **New: `container.preload(opts?)` creates singletons ahead of time,** so they can be read with `getInstanceSync` afterwards. Without options it creates every singleton bound at the time of the call; with `{ wires }`, only those wires and their imports. Creations run in parallel, wires that aren't singletons are skipped, and values already created are kept, so a later call creates only what is new. A failure rejects with that creation's own error, and the other creations still finish and are cached. New type: `PreloadOpts`. See "Preloading" in the README.
 - **`container.getAllAsync()` is deprecated** in favour of `preload`. It resolves bindings one at a time and also creates a value for every transient binding. It still works.
@@ -23,6 +23,10 @@ Fixes three singleton-cache behaviours that diverged from the typewire contract 
 
 - `bind` must replace an existing binding for the same type, because `apply` no longer unbinds first. Its return type is now `void | Promise<void>`, and `apply` awaits it.
 - The Inversify adapter's `bind` now does the unbind itself, so its behaviour is unchanged: re-applying still discards Inversify's cached instance.
+
+## 0.2.0-rc.1
+
+Release candidate for 0.2.0, with the same changes. They are listed under 0.2.0.
 
 ## 0.1.0
 

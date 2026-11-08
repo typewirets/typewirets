@@ -1,9 +1,8 @@
 # Changelog
 
-## 0.2.0-rc.1
+## 0.2.0
 
-- Depends on `@typewirets/core` 0.2.0-rc.1.
-
+- Depends on `@typewirets/core` 0.2.0.
 - **`useTypeWire` returns preloaded falsy values.** It ended with `if (value) return value`, so a preloaded `0`, `""`, `false` or `null` suspended as if it weren't ready, and the fallback showed. It now tells "not ready" apart from a falsy value.
 - **New: `usePreload({ wires })`.** Suspends the calling component until every singleton in `wires` is created, in parallel, so components below it read them with `useTypeWire` without suspending: one fallback for a route or feature instead of one per wire. Skips wires that aren't singletons; a failed creation reaches the nearest error boundary. Works with any resolution context. New type: `UsePreloadOpts`.
 - **New: `useTypeWire(wire, { suspend: false })`.** Throws a `TypeWireError` with reason `NotPreloaded`, naming the wire, instead of suspending when the value isn't created yet, so a forgotten preload shows up at once. The default still suspends. New type: `UseTypeWireOpts`.
@@ -19,6 +18,10 @@
 ### Also in this release: changes prepared as 0.1.1, which was never published
 
 - **CommonJS `require()` works.** The package is `"type": "module"`, so Node loaded the CommonJS build in `dist/cjs` as an ES module: `require()` from plain Node (TypeScript compiled to CommonJS, ts-node) threw `ReferenceError: exports is not defined`. Bundlers, Jest and ESM `import` were not affected. The build now writes `dist/cjs/package.json` with `{"type":"commonjs"}`.
+
+## 0.2.0-rc.1
+
+Release candidate for 0.2.0, with the same changes. They are listed under 0.2.0.
 
 ## 0.1.0
 
