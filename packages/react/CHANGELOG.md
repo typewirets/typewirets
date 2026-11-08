@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.2.0-rc.1
+
+- Depends on `@typewirets/core` 0.2.0-rc.1.
 
 - **`useTypeWire` returns preloaded falsy values.** It ended with `if (value) return value`, so a preloaded `0`, `""`, `false` or `null` suspended as if it weren't ready, and the fallback showed. It now tells "not ready" apart from a falsy value.
 - **New: `usePreload({ wires })`.** Suspends the calling component until every singleton in `wires` is created, in parallel, so components below it read them with `useTypeWire` without suspending: one fallback for a route or feature instead of one per wire. Skips wires that aren't singletons; a failed creation reaches the nearest error boundary. Works with any resolution context. New type: `UsePreloadOpts`.
@@ -14,10 +16,9 @@
 - **New: `ReactResolutionContext.clearErrors(typeSymbol?)`.** A cached resolution error lasts until you clear it, including after `unbind` and a re-apply, because the cache can't tell that a binding changed. To retry, pass your own `ReactResolutionContext` to the provider, call `clearErrors` after replacing the binding, and reset the error boundary. A failure that settles after `clearErrors` is not cached. See "When a resolution fails" in the README.
 - **Node.js 22 or later is required.** `engines.node` is now `>=22`, because Node.js 20 reached end-of-life on 30 April 2026. CI tests Node.js 22, 24 and 26.
 
-## 0.1.1
+### Also in this release: changes prepared as 0.1.1, which was never published
 
 - **CommonJS `require()` works.** The package is `"type": "module"`, so Node loaded the CommonJS build in `dist/cjs` as an ES module: `require()` from plain Node (TypeScript compiled to CommonJS, ts-node) threw `ReferenceError: exports is not defined`. Bundlers, Jest and ESM `import` were not affected. The build now writes `dist/cjs/package.json` with `{"type":"commonjs"}`.
-- Depends on `@typewirets/core` 0.1.1.
 
 ## 0.1.0
 
