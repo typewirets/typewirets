@@ -4,6 +4,8 @@ Guidance for AI coding agents (and humans) working in this repository. For build
 
 Public methods take an object with named parameters (for example `preload({ wires })`), not positional arguments, for maintainability.
 
+Stick with the latest pnpm version: the one npm's `latest` tag names, not an older major line.
+
 ## Security: supply chain and AI-driven attacks
 
 CI workflows run third-party code with access to our source, tokens, and caches. A compromised or look-alike dependency (an action, an npm package, a tool installed in CI) can steal credentials or tamper with published packages. AI agents add a second risk: text an agent reads (issues, PR descriptions, comments, commit messages, CI logs, web pages, package READMEs) can carry instructions meant to steer the agent into adding malicious code or dependencies.
