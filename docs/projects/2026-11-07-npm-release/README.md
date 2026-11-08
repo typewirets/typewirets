@@ -19,6 +19,7 @@ The maintainer releases `@typewirets/core`, `@typewirets/inversify` and `@typewi
 - 2026-11-07: the maintainer noted Q3 can only be met after merging: a workflow can only be dispatched from `main`.
 - 2026-11-07: after a code review, the maintainer asked for all seven findings to be fixed: building and packing moved to a job without the npm token, and the job that holds it runs no repository or dependency code (C5); dry runs no longer share the release's concurrency group; the wait job ends with a clear message before its timeout, including after a rejection; the tag is checked again right before it is created; npm's abbreviated metadata; one shared package list (`scripts/workspace-packages.mjs`); named parameters for multi-argument exports.
 - 2026-11-07: the maintainer asked for a skill that resolves the version. Added `.agents/skills/release` (copied to `.claude/skills/release`) and `node scripts/release.mjs suggest [ref]`: it rates commits since the latest version on npm by Conventional Commits, below 1.0.0 a breaking change bumps the minor version (agent's call), and it flags changelog sections that were never published (today: `## 0.1.1`). It suggests 0.2.0 for `main` today. The workflow still takes the typed version (Q2 A).
+- 2026-11-08: the first release through the workflow worked end to end: `0.2.0-rc.1` (#36 prepared the changelogs). All three packages went live under `next` after the maintainer approved each stage on npm; `latest` stays 0.1.0. Each has provenance naming commit 47da5e0, the adapters pin `@typewirets/core` to exactly 0.2.0-rc.1, and the workflow created the `v0.2.0-rc.1` tag on that commit and a pre-release with notes from the changelogs. On npm's trusted-publisher form, staging is always allowed and the only options are "Allow npm publish" and "Allow npm dist-tag", both left off. No npm token or GitHub secret is used.
 
 ## Open
 
@@ -27,7 +28,6 @@ The maintainer releases `@typewirets/core`, `@typewirets/inversify` and `@typewi
 
 ## Next steps
 
-1. Merge PR #23 once CI is green (stage 1 of done).
-2. One-time setup, by the maintainer (MAINTAINING.md, "One-time setup"): the GitHub environment `npm`; a trusted publisher per package on npmjs.com, added right before the first real release.
-3. A changelog PR that moves `## Unreleased` under the release version in all three packages.
-4. Run **Publish to npm** as a dry run, then for real; approve on npm; check that the tag, the GitHub release and provenance appear (stage 2 of done, T5, T6, T10, T12).
+1. Release 0.2.0 (stable): give each changelog a `## 0.2.0` section, either the rc's notes or a line pointing to them (`/release` suggests 0.2.0 and can open the PR). Then dry run and release. That completes Q3.
+2. On npm, set each package's publishing access to "Require two-factor authentication and disallow tokens", and revoke npm tokens no longer used.
+3. Note any answer to Q4 when it shows up (stage expiry, re-staging a pending version).

@@ -18,7 +18,9 @@
 //     Warns about any package whose npm provenance doesn't name this commit.
 //   node scripts/release.mjs suggest [ref]
 //     Suggests the next version from the commits between the latest version on
-//     npm (its v<version> tag) and ref (default HEAD). Used by the release skill.
+//     npm (its v<version> tag) and ref, and reports the changelogs at ref. With
+//     no ref: HEAD's commits and the working tree's changelogs. Used by the
+//     release skill.
 //
 // The pure functions are exported for scripts/release.test.mjs.
 import { execFileSync } from "node:child_process";
@@ -29,10 +31,11 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { workspacePackages } from "./workspace-packages.mjs";
 
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dependencyFields = [
   "dependencies",
   "peerDependencies",
@@ -261,6 +264,25 @@ export function changelogVersions(changelog) {
     .filter((v) => v && parseVersion(v));
 }
 
+// One package's changelog, as the suggestion reports it: whether it is ready
+// for `version` (null when there is nothing to release), and which version
+// sections were never published.
+export function changelogStatus({ changelog, version, published }) {
+  const [newest] = changelogVersions(changelog);
+  let state = "no entries";
+  if (version && changelogSection({ changelog, version })) {
+    state = `has "## ${version}"`;
+  } else if (changelogSection({ changelog, version: "Unreleased" })) {
+    state = 'entries under "## Unreleased"';
+  } else if (newest) {
+    state = `newest section is "## ${newest}"`;
+  }
+  const neverPublished = changelogVersions(changelog).filter(
+    (v) => !published.includes(v) && v !== version,
+  );
+  return { state, neverPublished };
+}
+
 export function releaseNotes({ version, sections }) {
   const parts = sections.map(({ name, section }) => `## ${name}\n\n${section}`);
   return `# v${version}\n\n${parts.join("\n\n")}\n`;
@@ -306,6 +328,24 @@ function publishablePackages() {
 function readChangelog(pkg) {
   const path = join(pkg.dir, "CHANGELOG.md");
   return existsSync(path) ? readFileSync(path, "utf8") : "";
+}
+
+// A package's changelog as it is at a git ref, so a suggestion for origin/main
+// doesn't depend on the branch that happens to be checked out. Empty only when
+// the ref has no changelog for the package; any other git failure throws.
+function changelogAt(pkg, ref) {
+  // Git paths use "/" whatever the OS separator, and resolve from the root.
+  const path = relative(repoRoot, join(pkg.dir, "CHANGELOG.md"))
+    .split(sep)
+    .join("/");
+  const git = (args) =>
+    execFileSync("git", args, {
+      cwd: repoRoot,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  if (git(["ls-tree", "--name-only", ref, "--", path]).trim() === "") return "";
+  return git(["show", `${ref}:${path}`]);
 }
 
 async function npmVersions(name) {
@@ -481,18 +521,22 @@ async function verify(version) {
 }
 
 // Prints a suggestion for the next version, for the release skill to check.
+// Without a ref, the suggestion is for HEAD and reads the changelogs in the
+// working tree, uncommitted edits included.
 async function suggest(ref) {
   const packages = publishablePackages();
   let latest;
   let commits;
   let published;
+  let changelogs;
   try {
     const versions = await Promise.all(
       packages.map((pkg) => npmVersions(pkg.manifest.name)),
     );
-    published = new Set(versions.flatMap((v) => v ?? []));
-    latest = latestStable([...published]);
-    const range = latest ? `v${latest}..${ref}` : ref;
+    published = versions.flatMap((v) => v ?? []);
+    latest = latestStable(published);
+    const head = ref ?? "HEAD";
+    const range = latest ? `v${latest}..${head}` : head;
     if (latest) {
       execFileSync(
         "git",
@@ -515,16 +559,19 @@ async function suggest(ref) {
         const [subject, body = ""] = entry.split("\x1f");
         return { subject, body };
       });
+    changelogs = packages.map((pkg) =>
+      ref ? changelogAt(pkg, ref) : readChangelog(pkg),
+    );
   } catch (err) {
     fail(
-      `Refused: ${err.message.split("\n")[0]}. Fetch the tags first: git fetch --tags origin`,
+      `Refused: ${(err.stderr?.toString().trim() || err.message).split("\n")[0].replace(/\.$/, "")}. If a tag or ref is missing, fetch first: git fetch --tags origin`,
     );
   }
 
   const suggestion = suggestVersion({ latest, commits });
   const lines = [
     `Latest version on npm: ${latest ?? "none"} (tag v${latest ?? "-"})`,
-    `Commits since then on ${ref}: ${commits.length}`,
+    `Commits since then on ${ref ?? "HEAD"}: ${commits.length}`,
     "",
     ...suggestion.commits.map((c) => `- ${c.impact.padEnd(8)} ${c.subject}`),
     "",
@@ -534,24 +581,19 @@ async function suggest(ref) {
     "",
     "Changelogs:",
   ];
-  for (const pkg of packages) {
-    const changelog = readChangelog(pkg);
-    const unreleased = changelogSection({ changelog, version: "Unreleased" });
-    const heading = suggestion.version
-      ? changelogSection({ changelog, version: suggestion.version })
-      : undefined;
-    lines.push(
-      `- ${pkg.manifest.name}: ${heading ? `has "## ${suggestion.version}"` : unreleased ? 'entries under "## Unreleased"' : "no entries"}`,
-    );
-    const neverPublished = changelogVersions(changelog).filter(
-      (v) => !published.has(v) && v !== suggestion.version,
-    );
+  packages.forEach((pkg, i) => {
+    const { state, neverPublished } = changelogStatus({
+      changelog: changelogs[i],
+      version: suggestion.version,
+      published,
+    });
+    lines.push(`- ${pkg.manifest.name}: ${state}`);
     if (neverPublished.length > 0) {
       lines.push(
         `  never published: ${neverPublished.map((v) => `"## ${v}"`).join(", ")}`,
       );
     }
-  }
+  });
   console.log(lines.join("\n"));
 }
 
@@ -574,7 +616,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   const [command, version, outDir] = process.argv.slice(2);
 
   if (command === "suggest") {
-    await suggest(version ?? "HEAD");
+    await suggest(version);
   } else if (!version) {
     fail(usage);
   } else if (command === "prepare" && outDir) {

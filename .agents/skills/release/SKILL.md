@@ -50,8 +50,10 @@ The three packages (`@typewirets/core`, `@typewirets/inversify`,
    each package's `CHANGELOG.md`, move the `## Unreleased` entries, and any
    never-published section, under `## <version>`. Every package gets the
    heading; one with no changes of its own gets "Depends on
-   `@typewirets/core` <version>." (MAINTAINING.md, Release Checklist). Open
-   it as a pull request (`create-pr`). *Done when* the PR is open, or the
+   `@typewirets/core` <version>." (MAINTAINING.md, Release Checklist). After
+   a pre-release, the stable version still needs its own section: the
+   pre-release's notes, or a line pointing to them. Open it as a pull
+   request (`create-pr`). *Done when* the PR is open, or the
    changelogs already have the heading.
 6. **Hand over the release.** After the changelog PR merges, the person runs
    **Publish to npm** from the Actions tab on `main` with the version and
