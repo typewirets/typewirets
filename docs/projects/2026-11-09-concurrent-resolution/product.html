@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A cycle fails the same way however you resolve, and never hangs</title>
+<style>
+:root{
+  --bg:#f4f5f7; --surface:#ffffff; --fg:#1a1f27; --muted:#5d6672; --line:#d6dae0;
+  --accent:#2f5fd0; --accent-soft:#e6ecfb;
+  --ok:#1d7a46; --warn:#9a6200; --bad:#b3261e;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 var(--sans)}
+main{max-width:720px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:28px}
+h1{font-size:1.6rem;line-height:1.2;margin:0;text-wrap:balance}
+h2{font-size:1.15rem;margin:0 0 8px}
+h3{font-size:1rem;margin:14px 0 4px}
+p{margin:0 0 8px}
+ul{margin:0 0 8px;padding-left:1.2em}
+li{margin:3px 0}
+code{font:.88em var(--mono);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:0 3px}
+.meta{font:13px/1.4 var(--mono);color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
+.takeaway{background:var(--accent-soft);border-left:4px solid var(--accent);padding:12px 14px;border-radius:0 6px 6px 0;font-weight:600}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+td:first-child{white-space:nowrap;width:3em}
+.note{display:block;font-size:.85rem;color:var(--muted);margin-top:3px}
+.call{display:block;font-size:.85rem;margin-top:6px;padding:6px 8px;border-left:3px solid var(--warn);background:var(--surface)}
+.call b{color:var(--warn)}
+figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px}
+figure svg{display:block;width:100%;height:auto;max-width:520px;margin:0 auto}
+figcaption{font-size:.9rem;color:var(--muted);margin-top:8px}
+figcaption b{color:var(--fg)}
+pre.out{white-space:pre-wrap;word-break:break-word;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px;font:12.5px/1.45 var(--mono);margin:6px 0 0}
+footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>A cycle fails the same way however you resolve, and never hangs</h1>
+    <div class="meta"><span>Key: concurrent-resolution</span><span>Date: <time datetime="2026-11-09">2026-11-09</time></span><span>Author: Claude Code (Opus 5.5), with the maintainer</span><span>Status: product brief, awaiting approval</span><span>Source: issue #20 and the maintainer's answers in chat</span></div>
+  </header>
+
+  <p class="takeaway">A developer gets the same answer from the container whether it resolves one thing at a time or many at once. A graph without a cycle always resolves. A graph with a cycle always fails with the same readable <code>CircularDependency</code> error, and never hangs. Their own monitor can still see every step and decide how errors are handled.</p>
+
+  <section id="value">
+    <h2>Value</h2>
+    <p id="v0"><b>V0.</b> Developers who build apps on typewirets can resolve concurrently (with <code>preload()</code>, or <code>Promise.all</code> inside a creator) and get exactly what they would get resolving one thing at a time. A wiring mistake shows up as a clear error they can act on, and they keep control over how resolution errors are handled.</p>
+    <ul>
+      <li id="v1"><b>V1.</b> Switching to <code>preload()</code> or parallel resolves never changes whether an app's graph works.</li>
+      <li id="v2"><b>V2.</b> A cycle fails a unit test, rather than leaving app startup waiting forever.</li>
+      <li id="v3"><b>V3.</b> The error reads the same every time, so developers learn it once.</li>
+      <li id="v4"><b>V4.</b> Teams keep their own error handling: reporting, custom errors and fallbacks.</li>
+      <li id="v5"><b>V5.</b> The TypeScript port meets the three concurrency expectations of the typewire contract it shares with the Python and Go ports: each resolve keeps its own chain (B1, B8), concurrent first resolves of a singleton share one creation (B2), and a cycle that runs through another resolve's in-flight creation raises an error instead of hanging (B3, B4).</li>
+    </ul>
+  </section>
+
+  <section id="terms">
+    <h2>Terms used below</h2>
+    <div class="scroll"><table><tbody>
+      <tr id="t-request"><td><b>Request</b></td><td>One top-level call: <code>get</code>, <code>getSync</code>, or a wire's <code>getInstance</code> / <code>getInstanceSync</code> on the container. <code>preload()</code> makes one request per singleton it creates.</td></tr>
+      <tr id="t-step"><td><b>Step</b></td><td>One resolve of one type inside a request, made by the request itself or by a creator through its <code>ctx</code>. A step can hit the cache, join a creation already in flight, or run a creator.</td></tr>
+      <tr id="t-chain"><td><b>Chain</b></td><td>The types a step sits inside, from the request's type down to the step's own type.</td></tr>
+      <tr id="t-cycle"><td><b>Cycle</b></td><td>Creating a type needs that same type before the creation finishes. This happens directly (<code>A</code> needs <code>A</code>), through the step's own chain, or by waiting on an in-flight creation that is itself waiting, directly or through others, on the waiting step's chain. It applies to every scope: singletons, and bindings with any other scope, which today behave as transients.
+        <span class="note">Not a cycle: waiting on an in-flight creation that isn't waiting back, or a resolve a creator makes after it has returned its value (that is a new request).</span></td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section id="behaviour">
+    <h2>Behaviour</h2>
+    <figure>
+      <svg viewBox="0 0 340 128" role="img" aria-labelledby="gcap">
+        <g font-size="12" fill="var(--fg)" font-family="var(--sans)">
+          <rect x="0" y="0" width="164" height="56" rx="6" fill="none" stroke="var(--ok)"/>
+          <text x="10" y="22" font-weight="600">Resolve concurrently</text>
+          <text x="10" y="42" fill="var(--muted)">B1–B2: no false alarms</text>
+          <rect x="176" y="0" width="164" height="56" rx="6" fill="none" stroke="var(--bad)"/>
+          <text x="186" y="22" font-weight="600">Cycles fail the same</text>
+          <text x="186" y="42" fill="var(--muted)">B3–B6: never hang</text>
+          <rect x="0" y="70" width="164" height="56" rx="6" fill="none" stroke="var(--accent)"/>
+          <text x="10" y="92" font-weight="600">The error reads the same</text>
+          <text x="10" y="112" fill="var(--muted)">B7–B8: today's format</text>
+          <rect x="176" y="70" width="164" height="56" rx="6" fill="none" stroke="var(--accent)"/>
+          <text x="186" y="92" font-weight="600">Monitors see and adapt</text>
+          <text x="186" y="112" fill="var(--muted)">B9–B12: built-in check</text>
+        </g>
+      </svg>
+      <figcaption id="gcap"><b>Four groups of behaviour: resolving concurrently, cycles, the error, and monitors.</b> The group headings below match the boxes.</figcaption>
+    </figure>
+
+    <h3>Resolve concurrently</h3>
+    <div class="scroll"><table><tbody>
+      <tr id="b1"><td><b>B1</b></td><td>A creator that resolves several imports at once, with <code>Promise.all</code> or a wire group's <code>getAllInstances(ctx)</code> (a group made with <code>typeWireGroupOf</code>), receives every value, in the order requested, when the graph has no cycle.
+        <span class="note">Example from #20: <code>App</code> resolves <code>Reader</code> and <code>Writer</code>, both of which import <code>Client</code>. The result is <code>reader(client) + writer(client)</code>, not an error.</span></td></tr>
+      <tr id="b2"><td><b>B2</b></td><td>Concurrent first requests for the same singleton share one creation: its creator runs once, and every requester receives the same instance. If that creation fails, every requester receives the same error, nothing is cached, and the next request runs the creator again.
+        <span class="note">Transient types are never shared: each step runs its own creator, as today.</span></td></tr>
+    </tbody></table></div>
+
+    <h3>Cycles fail the same way</h3>
+    <div class="scroll"><table><tbody>
+      <tr id="b3"><td><b>B3</b></td><td>A cycle fails with <code>CircularDependency</code> however it is reached. <code>get</code> and <code>getInstance</code> reject, whether called once, from <code>Promise.all</code> inside a creator, as concurrent top-level requests, or through <code>preload()</code>. <code>getSync</code> and <code>getInstanceSync</code> throw synchronously.
+        <span class="note">Unchanged: <code>getSync</code> still throws <code>AsyncOnlyBinding</code> when it meets an async creator, or a singleton whose creation is still in flight.</span></td></tr>
+      <tr id="b4"><td><b>B4</b></td><td>Every request caught in a cycle settles with a <code>CircularDependency</code> error as soon as the creators it waits on outside the cycle have settled. No timer is involved, and none stays pending.
+        <span class="note">Today, <code>get(A)</code> and <code>get(B)</code> started together on an <code>A ⇄ B</code> cycle never settle. A creator that never settles on its own is out of scope.</span></td></tr>
+      <tr id="b5"><td><b>B5</b></td><td>No value is cached for a type whose creation rejected because of a cycle: the cycle's own types, and the types above them in the failing chains. Once the developer breaks the cycle by re-applying a wire (<code>wire.apply(container)</code>, or <code>wire.withCreator(…).apply(container)</code>), the same container runs the new creator on the next request.
+        <span class="note">A creator that catches the error and returns a value has that value cached as usual. Singletons outside the cycle that are created by the same <code>preload()</code> are still cached, as <code>preload</code> does today.</span></td></tr>
+      <tr id="b6"><td><b>B6</b></td><td><code>await container.preload()</code> in a test rejects with <code>CircularDependency</code> when a bound singleton's creation runs into a cycle, so CI catches it.
+        <span class="note">As today, if several creations fail, <code>preload</code> rejects with the first error to arrive and lets the others finish.</span></td></tr>
+    </tbody></table></div>
+
+    <h3>The error reads the same</h3>
+    <div class="scroll"><table><tbody>
+      <tr id="b7"><td><b>B7</b></td><td>The error message keeps today's four lines. <code>Failed To Resolve</code> names the repeated type. <code>Resolution Path</code> starts at the request's type and ends with the repeated type in brackets, and that type also appears earlier in the path. <code>numberOfPathsToPrint</code> shortens long paths as it does today.
+        <pre class="out">Failed To Resolve A
+Reason: CircularDependency
+Instruction: Check for circular references in your dependency graph and refactor to break the cycle.
+Resolution Path: App -> A -> B -> [A]</pre>
+        <span class="note">A request that starts at <code>A</code> shows <code>A -> B -> [A]</code>.</span></td></tr>
+      <tr id="b8"><td><b>B8</b></td><td>Every <code>CircularDependency</code> path names each type of the cycle, in order, ending with the repeated type in brackets. Before the cycle, the path shows only the failing request's own chain. It never includes a type that is neither on that chain nor part of the cycle, such as a sibling branch's type.
+        <span class="note">When the cycle runs through another request's in-flight creation, its types appear in the path, because they are part of the cycle. When two requests are caught in one cycle, each one's error shows the whole cycle. Whether both errors carry identical text is left to the design. Today, sibling branches leak into each other's path (<code>App -> Reader -> Client -> Writer -> [Client]</code>); under B1 that example has no error at all.</span></td></tr>
+    </tbody></table></div>
+
+    <h3>Monitors see and adapt</h3>
+    <div class="scroll"><table><tbody>
+      <tr id="b9"><td><b>B9</b></td><td>The cycle check runs for every step, whether or not a custom monitor is configured. A monitor can't skip the check, and it always receives the <code>CircularDependency</code> error the check raises. What happens next is the monitor's choice (B11).</td></tr>
+      <tr id="b10"><td><b>B10</b></td><td>A custom monitor is called for every step of every request, including cache hits and joins of an in-flight creation. Each call gets the step's type, its chain, and its result or error. Steps running at the same time each report their own chain. A step is reported as started before the steps nested inside it, but sibling steps come in no fixed order.</td></tr>
+      <tr id="b11"><td><b>B11</b></td><td>A custom monitor can change a step's outcome, synchronously or asynchronously. It can throw a different error in place of any error, or return a value in place of any error other than <code>CircularDependency</code>. The step's caller receives what the monitor gave.
+        <span class="note">Example: report a <code>CircularDependency</code> to an error tracker, then rethrow it, or throw the team's own error type.</span>
+        <span class="note">A value a monitor returns is never cached as that step's own type. It does go to whatever was waiting on the step, and that creation may succeed and be cached.</span></td></tr>
+      <tr id="b12"><td><b>B12</b></td><td>A cycle always ends in an error for its callers. If a monitor returns a value for a <code>CircularDependency</code>, the step's caller still receives an error, and nothing waiting on that step is created or cached with the returned value.
+        <span class="note">Why: on 0337a79, a monitor that returns a fallback for an <code>A ⇄ B</code> cycle hides the cycle entirely. <code>B</code> is cached holding the fallback <code>A</code>, while <code>A</code> is cached as the real one, so the container holds two different <code>A</code>s. Decided by the maintainer on 2026-11-09: a cycle may only become another error.</span></td></tr>
+    </tbody></table></div>
+  </section>
+
+  <footer>Composed 2026-11-09 by Claude Code (Opus 5.5) using outcome-brief and html-for-humans, from issue typewirets/typewirets#20, the maintainer's answers in chat on 2026-11-09 (U1: A; U2: keep today's format; U3: monitor stays and can change outcomes; B11: a cycle may only become another error), plan.html in this folder, and packages/core/src/index.ts at 0337a79. Revised after a reader test by a fresh agent and a finding-by-finding review against it (reader-test.html in this folder).</footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Core tracks chains and waits; the monitor keeps its shape</title>
+<style>
+:root{
+  --bg:#f4f5f7; --surface:#ffffff; --fg:#1a1f27; --muted:#5d6672; --line:#d6dae0;
+  --accent:#2f5fd0; --accent-soft:#e6ecfb;
+  --ok:#1d7a46; --warn:#9a6200; --bad:#b3261e;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 var(--sans)}
+main{max-width:720px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:28px}
+h1{font-size:1.6rem;line-height:1.2;margin:0;text-wrap:balance}
+h2{font-size:1.15rem;margin:0 0 8px}
+h3{font-size:1rem;margin:12px 0 4px}
+p{margin:0 0 8px}
+ul,ol{margin:0 0 8px;padding-left:1.2em}
+li{margin:3px 0}
+code{font:.88em var(--mono);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:0 3px}
+.meta{font:13px/1.4 var(--mono);color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
+.takeaway{background:var(--accent-soft);border-left:4px solid var(--accent);padding:12px 14px;border-radius:0 6px 6px 0;font-weight:600}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
+td:first-child{white-space:nowrap}
+.chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.78rem;font-weight:600;border:1px solid currentColor;white-space:nowrap}
+.chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px}
+.card.pick{border:2px solid var(--accent)}
+.card h3{margin:0 0 6px}
+.card dl{margin:0;font-size:.88rem}
+.card dt{color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;margin-top:6px}
+.card dd{margin:0}
+figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px}
+figure svg{display:block;width:100%;height:auto;max-width:520px;margin:0 auto}
+figcaption{font-size:.9rem;color:var(--muted);margin-top:8px}
+figcaption b{color:var(--fg)}
+details{margin-top:6px} summary{cursor:pointer}
+fieldset{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:0 0 12px}
+legend{font-weight:600;padding:0 4px}
+label{display:block;padding:4px 0}
+.hint{font-size:.85rem;color:var(--muted);margin:2px 0 0 1.6em}
+textarea{width:100%;min-height:4.5em;font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px}
+.answer pre{white-space:pre-wrap;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.45 var(--mono)}
+button{font:inherit;font-weight:600;padding:8px 14px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);cursor:pointer}
+button:focus-visible,summary:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Core tracks chains and waits; the monitor keeps its shape</h1>
+    <div class="meta"><span>Key: concurrent-resolution</span><span>Date: <time datetime="2026-11-09">2026-11-09</time></span><span>Author: Claude Code (Opus 5.5)</span><span>Status: design brief, waiting for an approach pick</span><span>Source: product.html (approved 2026-11-09), core at 0337a79, typewirego container.go</span></div>
+  </header>
+
+  <p class="takeaway">Recommended: A1. Core gives every step its own chain and checks a container-wide wait-for map before joining an in-flight creation, so cycle detection is built in. The existing monitor interface stays and gains an optional third argument carrying the step's path. Existing monitors keep compiling, and the release is 0.3.0.</p>
+
+  <section id="links">
+    <h2>Serves</h2>
+    <ul>
+      <li><a href="product.html">product.html</a>, all lines B1–B12 (approved 2026-11-09).</li>
+      <li>Reader-test finding F14, the monitor's interface (<a href="reader-test.html">reader-test.html</a>).</li>
+    </ul>
+  </section>
+
+  <section id="named">
+    <h2>Approaches named earlier</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>ID</th><th>Approach</th><th>Verdict and evidence</th></tr></thead>
+      <tbody>
+        <tr id="m1"><td><b>M1</b></td><td>A child context per step carries the chain (triage plan, Q2: A).</td><td><span class="chip ok">Kept</span> It works in browsers. The Go port does the same: each <code>frame</code> holds a <code>parent</code> pointer, so chains are immutable and shared (container.go, <code>type frame</code>).</td></tr>
+        <tr id="m2"><td><b>M2</b></td><td>A wait-for check before joining an in-flight creation (issue #20; Go's <code>waitCycleLocked</code>; typewirepy#15, finding 5).</td><td><span class="chip ok">Kept</span> It is the only option that satisfies B4 without a timer. Go keeps a <code>waits map[*inst]int</code> on each in-flight creation, which is the same map.</td></tr>
+        <tr id="m3"><td><b>M3</b></td><td><code>AsyncLocalStorage</code> carries the chain.</td><td><span class="chip bad">Rejected</span> It is Node-only (triage Q2: B, declined). It would also hide the chain from custom <code>ResolutionContext</code>s.</td></tr>
+        <tr id="m4"><td><b>M4</b></td><td>A timeout on joins, failing after N ms.</td><td><span class="chip bad">Rejected</span> It breaks B4 ("no timer"), and it would fail slow creators that aren't cycles.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="approaches">
+    <h2>Approaches: how the monitor fits</h2>
+    <p>All three use M1 and M2 for detection. They differ in the monitor API.</p>
+    <div class="cards">
+      <div class="card pick" id="a1"><h3>A1. Keep the shape, add the path <span class="chip ok">pick</span></h3>
+        <dl>
+          <dt>What</dt><dd><code>monitor</code> and <code>monitorAsync</code> keep their signatures, plus an optional third argument <code>step: { path, requestId }</code>. Core runs the cycle check inside the step's action and enforces B12 after the monitor returns. <code>CircularDependencyMonitor</code> becomes a pass-through and is deprecated.</dd>
+          <dt>Effort / risk</dt><dd>M / low. Existing monitors compile unchanged.</dd>
+          <dt>Reuses</dt><dd>The factory and option, the error format and <code>getErrorMessage</code>.</dd>
+        </dl></div>
+      <div class="card" id="a2"><h3>A2. A new step hook</h3>
+        <dl>
+          <dt>What</dt><dd>One container-level <code>onStep(step, next)</code> middleware, with a step object (type, path, kind: cached, joined or created). The old factory stays for one release through an adapter.</dd>
+          <dt>Effort / risk</dt><dd>M–L / medium. Two APIs during deprecation, and more to document.</dd>
+          <dt>Gains</dt><dd>Step kinds and a cleaner model, but no B line needs them today.</dd>
+        </dl></div>
+      <div class="card" id="a3"><h3>A3. Observer only, like Go</h3>
+        <dl>
+          <dt>What</dt><dd>Events go to a queue and the observer can't change any outcome (typewirego doc.go: "can observe but never change container state").</dd>
+          <dt>Effort / risk</dt><dd>L / high. A breaking change.</dd>
+          <dt>Verdict</dt><dd>Fails B11, which you decided: a monitor can change outcomes.</dd>
+        </dl></div>
+    </div>
+  </section>
+
+  <section id="recommendation">
+    <h2 id="r1">R1. Recommendation: A1</h2>
+    <ul>
+      <li><b>Delivers every B line</b> with the smallest public change: one optional argument.</li>
+      <li><b>Keeps B11's power</b> through the same wrapping call monitors use today, and B12 is enforced by core, not by trusting the monitor.</li>
+      <li><b>Leaves room:</b> if anyone asks for step kinds or tracing, A2 can be added later on top of A1 without another break.</li>
+    </ul>
+  </section>
+
+  <section id="shape">
+    <h2>Shape</h2>
+    <figure>
+      <svg viewBox="0 0 340 236" role="img" aria-labelledby="shcap">
+        <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="var(--muted)"/></marker></defs>
+        <g font-size="12" fill="var(--fg)" font-family="var(--sans)">
+          <rect x="0" y="0" width="340" height="30" rx="5" fill="none" stroke="var(--line)"/>
+          <text x="10" y="20">container.get / getSync / preload → request</text>
+          <path d="M170,30 L170,46" stroke="var(--muted)" marker-end="url(#ar)"/>
+          <rect x="0" y="48" width="340" height="44" rx="5" fill="none" stroke="var(--accent)"/>
+          <text x="10" y="66" font-weight="600">Step context (immutable chain)</text>
+          <text x="10" y="84" fill="var(--muted)">child context per step → handed to the creator</text>
+          <path d="M170,92 L170,108" stroke="var(--muted)" marker-end="url(#ar)"/>
+          <rect x="0" y="110" width="340" height="44" rx="5" fill="none" stroke="var(--fg)"/>
+          <text x="10" y="128" font-weight="600">monitor(type, action, step)</text>
+          <text x="10" y="146" fill="var(--muted)">wraps the action; may rethrow or replace (B11)</text>
+          <path d="M170,154 L170,170" stroke="var(--muted)" marker-end="url(#ar)"/>
+          <rect x="0" y="172" width="340" height="62" rx="5" fill="none" stroke="var(--bad)"/>
+          <text x="10" y="190" font-weight="600">action: cycle checks, then create</text>
+          <text x="10" y="208" fill="var(--muted)">1. type already in chain? → CircularDependency</text>
+          <text x="10" y="226" fill="var(--muted)">2. join in-flight? walk wait-for map first</text>
+        </g>
+      </svg>
+      <figcaption id="shcap"><b>Every step runs in its own context. The monitor wraps the step, and the cycle checks run inside it, so the monitor always sees their error.</b>
+        <details><summary>Text version</summary>A request gets a step context holding an immutable chain. Each step calls the monitor with its type, its action and the step's path. The action first checks whether the type is already in the chain. Before joining an in-flight creation, it walks the container's wait-for map; if the walk reaches a creation the caller is inside, it throws CircularDependency. Otherwise it joins or creates. After the monitor returns, core rethrows the original CircularDependency if the monitor tried to replace it with a value (B12).</details>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="bounds">
+    <h2>Bounds and latitude</h2>
+    <div class="scroll"><table><tbody>
+      <tr id="n1"><td><b>N1</b></td><td><b>Appetite:</b> one core PR, with changelog entries for core, react and inversify. If the wait-for check (K1) grows past its timebox, stop and report.</td></tr>
+      <tr id="n2"><td><b>N2</b></td><td>No <code>AsyncLocalStorage</code>, no timers, no new dependencies. It must run in browsers.</td></tr>
+      <tr id="n3"><td><b>N3</b></td><td>No public type or export is removed. A monitor written for 0.2.0 compiles unchanged. <code>CircularDependencyMonitor</code> stays exported, marked deprecated.</td></tr>
+      <tr id="n4"><td><b>N4</b></td><td>Unchanged: the async contract of <code>createWith</code>, the semantics of <code>preload</code>, <code>getSync</code>'s <code>AsyncOnlyBinding</code>, and the #28 rule that a creation from before <code>unbind</code> never touches the cache.</td></tr>
+      <tr id="n5"><td><b>N5</b></td><td>The React and Inversify suites pass unchanged. All three packages release together, following the MAINTAINING.md checklist.</td></tr>
+      <tr id="n6"><td><b>N6</b></td><td><b>Not now:</b> step kinds or tracing events (A2), a <code>validate()</code> API, static checks of declared imports.</td></tr>
+      <tr id="l1"><td><b>L1</b></td><td><b>The builder decides alone:</b> data structures, file layout, how an error's path is assembled within B7 and B8, internal names, and test layout.</td></tr>
+      <tr id="l2"><td><b>L2</b></td><td><b>The builder checks first:</b> any public type change beyond the optional <code>step</code> argument; any B line it can't meet (say so, don't weaken a test); anything that would break a 0.2.0 monitor.</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section id="calls">
+    <h2>Claude's calls, for you to check</h2>
+    <div class="scroll"><table><tbody>
+      <tr id="c1"><td><b>C1</b></td><td><b>Release 0.3.0</b>, not 0.2.1. Custom monitors change behaviour (they can't switch detection off or turn a cycle into a value), and before 1.0 a minor version is where behaviour changes go.</td></tr>
+      <tr id="c2"><td><b>C2</b></td><td><b>Wait-for edges point at creations, not types.</b> A creation from before <code>unbind</code> and its replacement can be in flight together (#28), and keying by type would mix them up.</td></tr>
+      <tr id="c3"><td><b>C3</b></td><td><b>Each request caught in a cycle gets its own <code>CircularDependency</code></b>, with a path built from its own chain (B7: the path starts at the request's type). Otherwise the request that joined would receive the other request's path, such as <code>B -> A -> [B]</code> for a request that started at <code>A</code>. Every other failure of a shared creation is still one error object shared by all requesters (B2).</td></tr>
+      <tr id="c4"><td><b>C4</b></td><td><b>B12 is silent:</b> if a monitor returns a value for a <code>CircularDependency</code>, core rethrows the original error, logs nothing, and documents this in the TSDoc.</td></tr>
+      <tr id="c5"><td><b>C5</b></td><td><b>A monitor that never calls <code>action</code></b> skips that step's creation, and with it the cycle check. No cycle can form through a step that creates nothing, so B9 holds for every step that runs.</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section id="risks">
+    <h2>Risks and rabbit holes</h2>
+    <div class="scroll"><table><tbody>
+      <tr id="k1"><td><b>K1</b></td><td><b>The wait-for walk</b> must be right with nested creations, transient steps in between, and joins started from <code>getSync</code> paths. <b>Timebox: 1 day</b>, including a test that builds random small graphs, resolves them concurrently, and compares the outcome with single-request resolution.</td></tr>
+      <tr id="k2"><td><b>K2</b></td><td><b>Edges must not leak</b> after creations settle, through success, failure or <code>unbind</code>. A test resolves a diamond graph 1,000 times concurrently and expects no error.</td></tr>
+      <tr id="k3"><td><b>K3</b></td><td><b>Building each request's own path (C3)</b> for a joined cycle. <b>Timebox: half a day.</b> Falling back to a shared error breaks B7, so report rather than ship that.</td></tr>
+      <tr id="k4"><td><b>K4</b></td><td><b>React caches errors</b> until <code>clearErrors</code> (#31). A cycle fixed by re-applying a wire still needs <code>clearErrors</code> in React, which is already documented, so no change.</td></tr>
+    </tbody></table></div>
+  </section>
+
+  <section id="tests">
+    <h2>Test plan</h2>
+    <p>Run <code>pnpm test</code>, plus <code>pnpm check-types</code> and <code>pnpm lint</code>, locally and in CI (ci.yml already runs all three). New tests go in <code>packages/core/src/__tests__/</code>, and each one fails on 0337a79.</p>
+    <div class="scroll"><table>
+      <thead><tr><th>ID</th><th>Proves</th><th>Test</th></tr></thead>
+      <tbody>
+        <tr id="t1"><td><b>T1</b></td><td>B1</td><td>#20 repro 1: <code>Promise.all</code> and <code>getAllInstances(ctx)</code> inside a creator return the values in order.</td></tr>
+        <tr id="t2"><td><b>T2</b></td><td>B2</td><td>Concurrent first gets: the creator runs once, every caller gets the same instance. On failure: the same error object for all, then a retry succeeds.</td></tr>
+        <tr id="t3"><td><b>T3</b></td><td>B3</td><td>One table-driven test over entry points: <code>get</code>, <code>getSync</code>, <code>Promise.all</code> in a creator, concurrent gets, <code>preload</code>, and a self-cycle.</td></tr>
+        <tr id="t4"><td><b>T4</b></td><td>B4</td><td>#20 repro 2 and the <code>preload</code> variant: both settle, using fake timers to show that no timer is involved.</td></tr>
+        <tr id="t5"><td><b>T5</b></td><td>B5, B6</td><td>After a cycle, nothing in it is cached. Re-applying a fixed wire resolves it, and unrelated singletons from the same <code>preload</code> are cached.</td></tr>
+        <tr id="t6"><td><b>T6</b></td><td>B7, B8</td><td>The exact message for <code>App → A → B → [A]</code>. Concurrent siblings' paths hold no sibling types, and a joined cycle's path starts at the request's type and contains the whole cycle.</td></tr>
+        <tr id="t7"><td><b>T7</b></td><td>B9, B10</td><td>A recording monitor sees every step (cache hits and joins included), with its own path under concurrency, and receives the cycle error even when it ignores the path argument.</td></tr>
+        <tr id="t8"><td><b>T8</b></td><td>B11, B12</td><td>A monitor can turn an ordinary failure into a value, and a cycle into a custom error. Returning a value for a cycle still rejects, and nothing is cached with that value.</td></tr>
+        <tr id="t9"><td><b>T9</b></td><td>N3</td><td>A type-level test: a 0.2.0-style monitor class compiles and runs unchanged.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="left">
+    <h2>Left to the builder</h2>
+    <ul>
+      <li>Where the wait-for map lives, and its exact walk.</li>
+      <li>The name and exact shape of the <code>step</code> argument, within L2.</li>
+      <li>How the changelog and README describe the change, following the existing changelog style.</li>
+    </ul>
+  </section>
+
+  <section id="answer" class="answer">
+    <h2>Your answer</h2>
+    <form id="answer-form">
+      <fieldset>
+        <legend>Q1. Which approach?</legend>
+        <label><input type="radio" name="Q1" value="A1 — keep the monitor's shape, add an optional step argument" checked> A1 (recommended): keep the shape, add the path</label>
+        <label><input type="radio" name="Q1" value="A2 — new step hook with step kinds, old factory deprecated"> A2: a new step hook</label>
+      </fieldset>
+      <fieldset>
+        <legend>Q2. Claude's calls C1–C5 (0.3.0, edges by creation, own error per request, silent B12, a monitor that skips action)</legend>
+        <label><input type="radio" name="Q2" value="Accept all" checked> Accept all (recommended)</label>
+        <label><input type="radio" name="Q2" value="Change some (see notes)"> Change some (say which in the notes)</label>
+      </fieldset>
+      <label for="notes">Anything else?</label>
+      <textarea id="notes" name="notes" placeholder="Optional"></textarea>
+    </form>
+    <p>Copy this and paste it back into the chat:</p>
+    <pre id="answer-text"></pre>
+    <button type="button" id="copy">Copy answer</button>
+  </section>
+
+  <footer>Composed 2026-11-09 by Claude Code (Opus 5.5) using outcome-brief and html-for-humans, from product.html and reader-test.html in this folder, packages/core/src/index.ts and packages/react/src/index.tsx at 0337a79, .github/workflows/ci.yml, and typewirego/typewirego container.go and doc.go (main, read 2026-11-09).</footer>
+</main>
+<script>
+(function(){
+  var form=document.getElementById('answer-form'); if(!form) return;
+  var out=document.getElementById('answer-text'), btn=document.getElementById('copy');
+  var title=document.querySelector('h1').textContent.trim();
+  function build(){
+    var lines=['Answer to: '+title];
+    form.querySelectorAll('fieldset').forEach(function(fs){
+      var picked=fs.querySelector('input:checked');
+      lines.push(fs.querySelector('legend').textContent.trim()+' → '+(picked?picked.value:'(no answer)'));
+    });
+    var notes=form.querySelector('textarea').value.trim();
+    if(notes) lines.push('Notes: '+notes);
+    out.textContent=lines.join('\n');
+  }
+  form.addEventListener('input',build); build();
+  btn.addEventListener('click',function(){
+    var done=function(){btn.textContent='Copied';setTimeout(function(){btn.textContent='Copy answer'},1500)};
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(out.textContent).then(done,function(){selectText()});
+    } else selectText();
+  });
+  function selectText(){var r=document.createRange();r.selectNodeContents(out);var s=getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='Selected, copy it'}
+})();
+</script>
+</body>
+</html>
