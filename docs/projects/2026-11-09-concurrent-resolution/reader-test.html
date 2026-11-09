@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reader test: 15 of 16 findings addressed, one left to the design</title>
+<style>
+:root{
+  --bg:#f4f5f7; --surface:#ffffff; --fg:#1a1f27; --muted:#5d6672; --line:#d6dae0;
+  --accent:#2f5fd0; --accent-soft:#e6ecfb;
+  --ok:#1d7a46; --warn:#9a6200; --bad:#b3261e;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 var(--sans)}
+main{max-width:760px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:28px}
+h1{font-size:1.6rem;line-height:1.2;margin:0;text-wrap:balance}
+h2{font-size:1.15rem;margin:0 0 8px}
+p{margin:0 0 8px}
+code{font:.88em var(--mono);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:0 3px}
+.meta{font:13px/1.4 var(--mono);color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
+.takeaway{background:var(--accent-soft);border-left:4px solid var(--accent);padding:12px 14px;border-radius:0 6px 6px 0;font-weight:600}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:.78rem;text-transform:uppercase;letter-spacing:.04em}
+td:first-child{white-space:nowrap}
+.chip{margin-top:4px}
+.chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.78rem;font-weight:600;border:1px solid currentColor;white-space:nowrap}
+.chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)}
+pre.out{white-space:pre-wrap;word-break:break-word;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px;font:12.5px/1.45 var(--mono);margin:6px 0 0}
+footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Reader test: 15 of 16 findings addressed, one left to the design</h1>
+    <div class="meta"><span>Key: concurrent-resolution</span><span>Date: <time datetime="2026-11-09">2026-11-09</time></span><span>Author: Claude Code (Opus 5.5)</span><span>Status: review of product.html</span><span>Source: a fresh agent's reader test of product.html</span></div>
+  </header>
+
+  <p class="takeaway">A fresh agent read only the product brief and raised 16 findings. Rechecking each one against the brief: 15 are addressed. One (F14) is about how to build it and belongs to the design brief. F12 showed that Claude's call on B11 was wrong; the maintainer decided that a monitor may turn a cycle only into another error (B11, B12).</p>
+
+  <section id="summary">
+    <h2>Where each finding stands</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Status</th><th>Findings</th></tr></thead>
+      <tbody>
+        <tr><td><span class="chip ok">Addressed</span></td><td>F1–F13, F15, F16 (15)</td></tr>
+        <tr><td><span class="chip warn">Design brief</span></td><td>F14 (1)</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="findings">
+    <h2>Finding by finding</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>ID</th><th>Finding</th><th>Where the brief answers it</th></tr></thead>
+      <tbody>
+        <tr id="f1"><td><b>F1</b><br><span class="chip ok">Addressed</span></td><td>"Real cycle" isn't defined, and self-cycles, transient or scoped types, and resolves made after a creator returns aren't covered.</td><td>A <b>Cycle</b> entry under <b>Terms</b>: a self-cycle counts; waiting on a creation that isn't waiting back doesn't; a resolve made after the creator returns is a new request; any non-singleton scope behaves as transient (fixed in this review).</td></tr>
+        <tr id="f2"><td><b>F2</b><br><span class="chip ok">Addressed</span></td><td><code>getSync</code> can't reject, and its behaviour on async creators is unstated.</td><td>B3: it throws synchronously. A note added in this review: <code>AsyncOnlyBinding</code> behaviour is unchanged.</td></tr>
+        <tr id="f3"><td><b>F3</b><br><span class="chip ok">Addressed</span></td><td>B4 (one shared error) contradicts B8 (each request's own path).</td><td>B8 note: each error's path shows the whole cycle. Whether two errors carry identical text is left to the design, and a test checks the cycle, not the exact string.</td></tr>
+        <tr id="f4"><td><b>F4</b><br><span class="chip ok">Addressed</span></td><td>"Never pending" can't be tested.</td><td>B4: the request settles as soon as the creators it waits on outside the cycle have settled, with no timer. A creator that never settles is out of scope.</td></tr>
+        <tr id="f5"><td><b>F5</b><br><span class="chip ok">Addressed</span></td><td>Which types count as "failed because of a cycle", and is a recovered value cached?</td><td>B5: the cycle's types and the types above them in the failing chains. A creator that catches the error and recovers has its value cached as usual.</td></tr>
+        <tr id="f6"><td><b>F6</b><br><span class="chip ok">Addressed</span></td><td>How is a wire rebound?</td><td>B5 names <code>wire.apply(container)</code> and <code>withCreator(…).apply</code>.</td></tr>
+        <tr id="f7"><td><b>F7</b><br><span class="chip ok">Addressed</span></td><td>What <code>preload</code> does today, with two cycles or with errors that aren't cycles.</td><td>B5 and B6 notes: <code>preload</code> rejects with the first error to arrive, lets the other creations finish, and caches singletons outside the cycle.</td></tr>
+        <tr id="f8"><td><b>F8</b><br><span class="chip ok">Addressed</span></td><td>When a shared creation fails: one error for all, and can a later request retry? Are transients shared?</td><td>B2: every requester gets the same error, nothing is cached, and the next request runs the creator again. Transients are never shared.</td></tr>
+        <tr id="f9"><td><b>F9</b><br><span class="chip ok">Addressed</span></td><td>Which type goes in "Failed To Resolve", and what path a top-level request shows.</td><td>B7: "Failed To Resolve" names the repeated type, and a request that starts at <code>A</code> shows <code>A -> B -> [A]</code>.</td></tr>
+        <tr id="f10"><td><b>F10</b><br><span class="chip ok">Addressed</span></td><td>A cycle that runs through a sibling branch contradicts "never sibling types"; the correct path for #20 isn't shown.</td><td>B8: the cycle's own types are always shown, even from another branch or request. The #20 example has no error at all under B1.</td></tr>
+        <tr id="f11"><td><b>F11</b><br><span class="chip ok">Addressed</span></td><td>B9 (can't switch detection off) contradicts B11 (a monitor can return a value).</td><td>B9 reworded: the check always runs and the monitor always receives its error; what happens next is the monitor's choice. How far that choice goes is F12.</td></tr>
+        <tr id="f12"><td><b>F12</b><br><span class="chip ok">Addressed</span></td><td>If a monitor replaces a cycle error with a value: is it cached, do the other requests get it, is the monitor called per request or per cycle, can it be async?</td><td>Per step per request, and async is allowed (B10, B11). Claude's call, "not cached; other requests still get errors", was <b>wrong</b>; see below. The maintainer decided: a cycle may only become another error (B11, B12).</td></tr>
+        <tr id="f13"><td><b>F13</b><br><span class="chip ok">Addressed</span></td><td>What a "step" is, and whether any ordering is guaranteed.</td><td>A <b>Step</b> entry under <b>Terms</b> (a cache hit, a join or a creator run), and B10's ordering rule.</td></tr>
+        <tr id="f14"><td><b>F14</b><br><span class="chip warn">Design</span></td><td>The monitor's interface: what it is called with, the path's shape, the return contract.</td><td>A question of how, so it goes in the design brief, along with whether existing monitors keep compiling.</td></tr>
+        <tr id="f15"><td><b>F15</b><br><span class="chip ok">Addressed</span></td><td>The cross-port contract in V5 can't be tested.</td><td>V5 now lists the contract's three expectations and maps them to B1, B2, B3, B4 and B8.</td></tr>
+        <tr id="f16"><td><b>F16</b><br><span class="chip ok">Addressed</span></td><td>"A group" is undefined, and is the order kept?</td><td>B1: a group made with <code>typeWireGroupOf</code>, with results in the order requested.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="f12-detail">
+    <h2>Why F12 needed the maintainer</h2>
+    <p>Run on <code>main</code> at 0337a79: an <code>A ⇄ B</code> cycle, with a monitor that returns <code>fallbackA</code> whenever it sees a <code>CircularDependency</code>.</p>
+    <pre class="out">get(A) -> realA | cached B.a -> fallbackA | A again -> realA</pre>
+    <ul>
+      <li>No request sees an error: the cycle is silently swallowed.</li>
+      <li>The cached <code>B</code> holds the fallback <code>A</code>, but <code>A</code> itself is cached as the real <code>A</code>. The container now holds two different <code>A</code>s.</li>
+    </ul>
+    <p><b>Decided 2026-11-09:</b> a monitor can turn any other error into a value, but can turn a <code>CircularDependency</code> only into another error. That keeps "change behaviour" (reporting, custom errors, fallbacks for ordinary failures) without letting a cycle leave the container inconsistent.</p>
+  </section>
+
+  <footer>Composed 2026-11-09 by Claude Code (Opus 5.5) using html-for-humans, from the reader-test agent's 16 findings, product.html in this folder, and a check of monitor fallback behaviour against packages/core/src/index.ts at 0337a79 on Node 24.13.</footer>
+</main>
+</body>
+</html>

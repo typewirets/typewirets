@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>#20 is still open, and preload now hangs on a cycle</title>
+<style>
+/* Tokens: change values here only. Light first, dark redefines the same names. */
+:root{
+  --bg:#f4f5f7; --surface:#ffffff; --fg:#1a1f27; --muted:#5d6672; --line:#d6dae0;
+  --accent:#2f5fd0; --accent-soft:#e6ecfb;
+  --ok:#1d7a46; --warn:#9a6200; --bad:#b3261e;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161b; --surface:#1b2027; --fg:#e6e9ed; --muted:#9aa3ae; --line:#2e3540;
+  --accent:#7ea2ff; --accent-soft:#1f2a44;
+  --ok:#5cc98c; --warn:#e7b04f; --bad:#ff8a80;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 var(--sans)}
+main{max-width:720px;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:28px}
+h1{font-size:1.6rem;line-height:1.2;margin:0;text-wrap:balance}
+h2{font-size:1.15rem;margin:0 0 8px}
+p{margin:0 0 8px}
+ul,ol{margin:0 0 8px;padding-left:1.2em}
+li{margin:2px 0}
+code{font:.88em var(--mono);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:0 3px}
+.meta{font:13px/1.4 var(--mono);color:var(--muted);display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:8px}
+.takeaway{background:var(--accent-soft);border-left:4px solid var(--accent);padding:12px 14px;border-radius:0 6px 6px 0;font-weight:600}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.92rem}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em}
+.chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:.8rem;font-weight:600;border:1px solid currentColor;white-space:nowrap}
+.chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)}
+figure{margin:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px}
+figure svg{display:block;width:100%;height:auto;max-width:520px;margin:0 auto}
+figcaption{font-size:.9rem;color:var(--muted);margin-top:8px}
+figcaption b{color:var(--fg)}
+pre.out{white-space:pre-wrap;word-break:break-word;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px;font:12.5px/1.45 var(--mono);margin:0}
+details{margin-top:6px} summary{cursor:pointer}
+fieldset{border:1px solid var(--line);border-radius:6px;padding:10px 12px;margin:0 0 12px}
+legend{font-weight:600;padding:0 4px}
+label{display:block;padding:4px 0}
+.hint{font-size:.85rem;color:var(--muted);margin:2px 0 0 1.6em}
+textarea{width:100%;min-height:4.5em;font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:8px}
+.answer pre{white-space:pre-wrap;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:10px;font:13px/1.45 var(--mono)}
+button{font:inherit;font-weight:600;padding:8px 14px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);cursor:pointer}
+button:focus-visible,summary:focus-visible,input:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+footer{font:12px/1.4 var(--mono);color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>#20 is still open, and preload now hangs on a cycle</h1>
+    <div class="meta"><span>Date: <time datetime="2026-11-09">2026-11-09</time></span><span>Author: Claude Code (Opus 5.5)</span><span>Status: superseded by product.html and design.html (2026-11-09)</span><span>Source: issue #20, core at 0337a79</span></div>
+  </header>
+
+  <p class="takeaway">Issue #20 is not fixed. Both of its bugs still reproduce on <code>main</code>. Since 0.2.0, <code>container.preload()</code> hangs forever on any dependency cycle, so the bug can now be hit through a public API. The fix agreed on 2026-11-05 (triage plan, PR 3) still holds. What has changed is the release: 0.2.0 already shipped without it, so the fix goes out as 0.3.0.</p>
+
+  <section id="status">
+    <h2>Does it still reproduce?</h2>
+    <ul>
+      <li>Every check below ran against <code>packages/core/src/index.ts</code> on <code>main</code> at 0337a79, using Node 24.13.</li>
+      <li>#28 and #32 changed core after the issue was filed, but neither touched the resolution chain or the in-flight join.</li>
+    </ul>
+    <div class="scroll"><table>
+      <thead><tr><th>Check</th><th>Expected</th><th>On main</th></tr></thead>
+      <tbody>
+        <tr id="c1"><td><b>C1.</b> <code>App</code> resolves <code>Reader</code> and <code>Writer</code> at once, and both import <code>Client</code></td><td><code>reader(client) + writer(client)</code></td><td><span class="chip bad">False cycle</span><br>path <code>App → Reader → Client → Writer → [Client]</code></td></tr>
+        <tr id="c2"><td><b>C2.</b> <code>A ⇄ B</code> cycle, with <code>get(A)</code> and <code>get(B)</code> started together</td><td><code>CircularDependency</code></td><td><span class="chip bad">Hangs</span><br>still pending after 1s</td></tr>
+        <tr id="c3"><td><b>C3.</b> <i>New:</i> the same <code>A ⇄ B</code> cycle, with <code>container.preload()</code></td><td><code>CircularDependency</code></td><td><span class="chip bad">Hangs</span><br>still pending after 1s</td></tr>
+        <tr id="c4"><td><b>C4.</b> The same cycle with a single <code>get(A)</code> (control)</td><td><code>CircularDependency</code></td><td><span class="chip ok">Correct</span></td></tr>
+      </tbody>
+    </table></div>
+    <p><b>Why C3 matters:</b> <code>preload()</code> starts every singleton at the same moment (<code>index.ts:1621</code>). A cycle that one <code>get</code> reports right away now leaves app startup waiting forever, with no error.</p>
+  </section>
+
+  <section id="cause">
+    <h2>What causes each bug?</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Bug</th><th>Cause in code</th></tr></thead>
+      <tbody>
+        <tr><td>False cycle (C1)</td><td>Each top-level request gets one <code>CircularDependencyMonitor</code>, and all of that request's branches share its mutable set and stack (<code>index.ts:836–882</code>). <code>remove()</code> pops whatever entry is on top of the stack, not its own, which is why the printed path is garbled.</td></tr>
+        <tr><td>Hang (C2, C3)</td><td><code>get</code> awaits any in-flight creation it finds, without checking first whether that creation is itself waiting on the caller (<code>index.ts:1387–1391</code>).</td></tr>
+      </tbody>
+    </table></div>
+    <figure>
+      <svg viewBox="0 0 340 262" role="img" aria-labelledby="f1cap">
+        <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="var(--muted)"/></marker>
+        <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0L10,5L0,10z" fill="var(--bad)"/></marker></defs>
+        <g font-size="12" fill="var(--fg)" font-family="var(--sans)">
+          <text x="0" y="14" font-weight="600">Today: one shared stack per request</text>
+          <rect x="0" y="22" width="230" height="24" rx="4" fill="none" stroke="var(--bad)"/>
+          <text x="8" y="38">[App, Reader, Client, Writer]</text>
+          <text x="0" y="64" fill="var(--bad)">Writer asks for Client → false cycle</text>
+
+          <text x="0" y="96" font-weight="600">Planned: one chain per step</text>
+          <rect x="0" y="104" width="170" height="24" rx="4" fill="none" stroke="var(--ok)"/>
+          <text x="8" y="120">App → Reader → Client</text>
+          <rect x="0" y="134" width="170" height="24" rx="4" fill="none" stroke="var(--ok)"/>
+          <text x="8" y="150">App → Writer → Client</text>
+          <text x="180" y="136" fill="var(--muted)">Siblings never</text>
+          <text x="180" y="152" fill="var(--muted)">see each other</text>
+
+          <text x="0" y="188" font-weight="600">Hang: two requests wait on each other</text>
+          <rect x="0" y="210" width="90" height="28" rx="4" fill="none" stroke="var(--fg)"/>
+          <text x="10" y="228">creating A</text>
+          <rect x="240" y="210" width="90" height="28" rx="4" fill="none" stroke="var(--fg)"/>
+          <text x="250" y="228">creating B</text>
+          <path d="M90,216 L238,216" stroke="var(--bad)" stroke-dasharray="4 3" marker-end="url(#ab)" fill="none"/>
+          <path d="M240,232 L92,232" stroke="var(--bad)" stroke-dasharray="4 3" marker-end="url(#ab)" fill="none"/>
+          <text x="145" y="209" fill="var(--bad)">awaits</text>
+          <text x="145" y="250" fill="var(--bad)">awaits</text>
+        </g>
+      </svg>
+      <figcaption id="f1cap"><b>Two causes: branches share one stack, and joining an in-flight creation never checks for a wait cycle.</b>
+        <details><summary>Text version</summary>Today, one request keeps a single stack that holds App, Reader, Client and Writer, so when Writer asks for Client it finds Client already there and reports a cycle. In the plan, each step carries its own chain (App → Reader → Client, App → Writer → Client), so siblings never see each other. In the hang, the creation of A awaits the in-flight creation of B, and the creation of B awaits A, so neither promise ever settles.</details>
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="plan">
+    <h2>How do we fix it?</h2>
+    <p>One core PR. Steps S1 to S3 are the triage plan's P3a to P3c, updated for today's code.</p>
+    <ol>
+      <li id="s1"><b>S1. One chain per step.</b> Each <code>get</code> and <code>getSync</code> gives its creator a child context that holds an immutable chain: the parent's chain plus the type being created. The cycle check becomes "is this type already in my chain?". Siblings started with <code>Promise.all</code> or <code>getAllInstances(ctx)</code> each get their own chain, so the false cycle and the garbled path both go away. The chain is passed explicitly, not through <code>AsyncLocalStorage</code>, so it works in browsers too. That was decided in triage Q2.</li>
+      <li id="s2"><b>S2. Check for a wait cycle before joining.</b> <code>ResolutionState</code> keeps a wait-for map: for each in-flight singleton creation, the creations it is currently waiting on. An edge is added when a step inside a creation joins or starts another creation, and removed when that creation settles. Before joining an in-flight creation, <code>get</code> follows the map from it. If the walk reaches a creation in the caller's own chain, <code>get</code> throws <code>CircularDependency</code> with the full path instead of waiting. When it throws, both requests reject and nothing is left cached, so a retry runs cleanly. The Go port's <code>waitCycleLocked</code> and typewirepy#15 (finding 5) work the same way.</li>
+      <li id="s3"><b>S3. Monitor API.</b> Today the pluggable <code>ResolutionRequestMonitor</code> does the cycle detection, and its shape assumes one stack per request. The wait-for check needs state that spans the whole container, so it has to live in core. Where cycle detection lives is the open choice; see <a href="#answer">Q1</a>.</li>
+      <li id="s4"><b>S4. Behaviour tests</b> (<code>packages/core/src/__tests__/</code>). Each test fails on today's <code>main</code>:
+        <ul>
+          <li>C1 resolves to <code>reader(client) + writer(client)</code>, and <code>Client</code>'s creator runs exactly once.</li>
+          <li>C2: both <code>get</code>s reject with <code>CircularDependency</code> well within 1 second, and each path ends in a repeated type.</li>
+          <li>C3: <code>preload()</code> rejects with <code>CircularDependency</code>, and a non-cyclic <code>preload()</code> on the same container still works.</li>
+          <li>A real cycle inside one branch of a <code>Promise.all</code> reports a clean path, with none of its siblings' types in it.</li>
+          <li>The existing tests for per-request isolation, singleton creation and preload pass unchanged. The React and Inversify suites also pass.</li>
+        </ul></li>
+      <li id="s5"><b>S5. Release.</b> Changelog entries for core, react and inversify, plus a README note on concurrent resolution. The version follows the release checklist and Q2.</li>
+    </ol>
+  </section>
+
+  <section id="risks">
+    <h2>What could go wrong?</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Risk</th><th>Guard</th></tr></thead>
+      <tbody>
+        <tr><td>The wait-for map leaks entries, or reports a cycle that isn't there</td><td>Entries are removed in <code>finally</code> on the same identity check that #28 added. A test runs a diamond graph of 50 concurrent requests and expects no error.</td></tr>
+        <tr><td><code>ReactResolutionContext</code> builds on core's context</td><td>Run the React suite. It wraps the container, not <code>ScopedResolutionContext</code>, so no change is expected.</td></tr>
+        <tr><td>Someone uses a custom monitor (none are known: no package in this repo uses one)</td><td>The changelog spells out the change; see Q1.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="answer" class="answer">
+    <h2>Your answer</h2>
+    <form id="answer-form">
+      <fieldset>
+        <legend>Q1. Where should cycle detection live?</legend>
+        <label><input type="radio" name="Q1" value="A — core detects cycles from the chain and the wait-for map; the monitor becomes an observation hook that also receives the step's path; CircularDependencyMonitor is deprecated" checked> A (recommended): core detects cycles; the monitor only observes</label>
+        <p class="hint">Cycle detection always runs, even with a custom monitor. The monitor gets the step's path as an extra argument, so existing implementations still type-check. A custom monitor can no longer switch cycle detection off.</p>
+        <label><input type="radio" name="Q1" value="B — keep detection in CircularDependencyMonitor, rewritten to read the step's path; core only adds the wait-for check"> B: keep detection in the monitor, rewritten to read the step's path</label>
+        <p class="hint">Fewer moving parts in the API, but detection is split in two: chain cycles in the monitor, wait cycles in core. A custom monitor that ignores the path still has today's bugs.</p>
+      </fieldset>
+      <fieldset>
+        <legend>Q2. Which release?</legend>
+        <label><input type="radio" name="Q2" value="A — 0.3.0 for core, react and inversify together (behaviour change for custom monitors)" checked> A (recommended): 0.3.0, all three packages together</label>
+        <p class="hint">Before 1.0, a minor version is where behaviour changes go, and this one changes what custom monitors do.</p>
+        <label><input type="radio" name="Q2" value="B — 0.2.1 patch, treating it as a bug fix"> B: 0.2.1 patch</label>
+      </fieldset>
+      <label for="notes">Anything else?</label>
+      <textarea id="notes" name="notes" placeholder="Optional"></textarea>
+    </form>
+    <p>Copy this and paste it back into the chat:</p>
+    <pre id="answer-text"></pre>
+    <button type="button" id="copy">Copy answer</button>
+  </section>
+
+  <details>
+    <summary>Reproduction output (main at 0337a79, Node 24.13)</summary>
+    <pre class="out">1: Reason: CircularDependency | Resolution Path: App -> Reader -> Client -> Writer -> [Client]
+2: still pending after 1s
+preload cycle: still pending after 1s
+single get: Reason: CircularDependency</pre>
+    <p>C1 and C2 use the script from issue #20 as written. C3 binds the same <code>A</code> and <code>B</code> to a new container and calls <code>container.preload()</code>.</p>
+  </details>
+
+  <footer>Composed 2026-11-09 by Claude Code (Opus 5.5) using html-for-humans, from GitHub issue typewirets/typewirets#20, docs/projects/issue-triage-2026-11/plan.html, docs/projects/2026-11-05-sync-createwith/README.md, packages/core/src/index.ts at 0337a79, and the issue's reproduction script plus a preload variant, run on Node 24.13.</footer>
+</main>
+<script>
+(function(){
+  var form=document.getElementById('answer-form'); if(!form) return;
+  var out=document.getElementById('answer-text'), btn=document.getElementById('copy');
+  var title=document.querySelector('h1').textContent.trim();
+  function build(){
+    var lines=['Answer to: '+title];
+    form.querySelectorAll('fieldset').forEach(function(fs){
+      var picked=fs.querySelector('input:checked');
+      lines.push(fs.querySelector('legend').textContent.trim()+' → '+(picked?picked.value:'(no answer)'));
+    });
+    var notes=form.querySelector('textarea').value.trim();
+    if(notes) lines.push('Notes: '+notes);
+    out.textContent=lines.join('\n');
+  }
+  form.addEventListener('input',build); build();
+  btn.addEventListener('click',function(){
+    var done=function(){btn.textContent='Copied';setTimeout(function(){btn.textContent='Copy answer'},1500)};
+    if(navigator.clipboard&&navigator.clipboard.writeText){
+      navigator.clipboard.writeText(out.textContent).then(done,function(){selectText()});
+    } else selectText();
+  });
+  function selectText(){var r=document.createRange();r.selectNodeContents(out);var s=getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='Selected, copy it'}
+})();
+</script>
+</body>
+</html>
