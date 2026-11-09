@@ -29,13 +29,17 @@ jobs:
       with:
         node-version: ${{ matrix.node-version }}
 
-    # Node 25+ no longer bundles Corepack, so install a pinned version from npm.
-    # Corepack then installs the pnpm version in packageManager and checks its sha512.
+    # A documented exception in AGENTS.md, pinned to a commit. It installs a
+    # bootstrap pnpm from its own committed npm lockfile, then self-updates to
+    # the version in packageManager, checked against npm's signature. No
+    # Corepack: Node 25+ doesn't bundle it.
     - name: Setup pnpm
-      run: |
-        npm install -g corepack@0.36.0
-        corepack enable
-        pnpm --version
+      uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+    # pnpm can fall back to the version it is running instead of failing, so
+    # make sure the pinned version is the one on PATH.
+    - name: Check pnpm version
+      run: test "$(pnpm --version)" = "$(node -p "require('./package.json').packageManager.replace(/^pnpm@/, '')")"
 
     - name: Get pnpm store directory
       id: pnpm-cache

@@ -64,7 +64,9 @@ file_descriptor_set.bin
 # include test fixtures for vt100
 !crates/turborepo-vt100/tests/data
 
+# direnv and devenv
 /.direnv/
+/.devenv*
 
 # Release tarballs (scripts/release.mjs pack)
 dist-release/

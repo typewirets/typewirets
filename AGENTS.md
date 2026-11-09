@@ -4,6 +4,10 @@ Guidance for AI coding agents (and humans) working in this repository. For build
 
 Public methods take an object with named parameters (for example `preload({ wires })`), not positional arguments, for maintainability.
 
+Stick with the latest pnpm version: the one npm's `latest` tag names, not an older major line.
+
+Set up the dev environment just like typewirego/typewirego and typewirepy/typewirepy: a devenv flake, `.envrc` and a `justfile`.
+
 ## Security: supply chain and AI-driven attacks
 
 CI workflows run third-party code with access to our source, tokens, and caches. A compromised or look-alike dependency (an action, an npm package, a tool installed in CI) can steal credentials or tamper with published packages. AI agents add a second risk: text an agent reads (issues, PR descriptions, comments, commit messages, CI logs, web pages, package READMEs) can carry instructions meant to steer the agent into adding malicious code or dependencies.
@@ -28,8 +32,9 @@ Before adding an action, check its Marketplace listing yourself. Confirm the own
 | `actions/cache` | GitHub | Verified creator | |
 | `actions/upload-artifact` | GitHub | Verified creator | |
 | `actions/download-artifact` | GitHub | Verified creator | |
+| `pnpm/action-setup` | pnpm | Not verified | pnpm's own installer for GitHub Actions. Maintainer sign-off: #39. Pin it to a full commit SHA like every action, read the diff before each bump, and keep the `pnpm --version` check after it. |
 
-There are no exceptions today. pnpm is installed with a `run:` step (a pinned `corepack` from npm, which checks the `packageManager` hash) rather than the unverified `pnpm/action-setup`.
+`pnpm/action-setup` is the only exception. It installs pnpm from its own committed npm lockfile and then switches to the version in `packageManager`. A step after it checks that `pnpm --version` matches. Don't bring back Corepack: Node.js 25 and later don't bundle it.
 
 ### GitHub Actions: pin to a full commit SHA
 
