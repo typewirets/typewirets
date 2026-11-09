@@ -2,7 +2,7 @@
 
 The maintainer releases `@typewirets/core`, `@typewirets/inversify` and `@typewirets/react` from GitHub in one run, at one version. Each package goes live only after the maintainer approves it on npm with 2FA, and the tag and GitHub release follow. No npm token is stored anywhere.
 
-- [product.html](product.html): value V0–V6, behaviour B1–B16. Status: approved 2026-11-07 with Q1 A (tag and release only once all are live), Q2 A (the maintainer types the version; npm guards it), Q3 A (done when the next real release ships end to end).
+- [product.html](product.html): value V0–V6, behaviour B1–B16. Status: done 2026-11-08 (0.2.0 released end to end); approved 2026-11-07 with Q1 A (tag and release only once all are live), Q2 A (the maintainer types the version; npm guards it), Q3 A (done when the next real release ships end to end).
 - [design.html](design.html): approaches M1–M3, A1–A3; picked A1 (one workflow plus a plan step); calls C1–C5; test plan T1–T18. Status: A1 built 2026-11-07, after the maintainer's "go ahead and implement".
 
 ## Where things stand
@@ -20,6 +20,7 @@ The maintainer releases `@typewirets/core`, `@typewirets/inversify` and `@typewi
 - 2026-11-07: after a code review, the maintainer asked for all seven findings to be fixed: building and packing moved to a job without the npm token, and the job that holds it runs no repository or dependency code (C5); dry runs no longer share the release's concurrency group; the wait job ends with a clear message before its timeout, including after a rejection; the tag is checked again right before it is created; npm's abbreviated metadata; one shared package list (`scripts/workspace-packages.mjs`); named parameters for multi-argument exports.
 - 2026-11-07: the maintainer asked for a skill that resolves the version. Added `.agents/skills/release` (copied to `.claude/skills/release`) and `node scripts/release.mjs suggest [ref]`: it rates commits since the latest version on npm by Conventional Commits, below 1.0.0 a breaking change bumps the minor version (agent's call), and it flags changelog sections that were never published (today: `## 0.1.1`). It suggests 0.2.0 for `main` today. The workflow still takes the typed version (Q2 A).
 - 2026-11-08: the first release through the workflow worked end to end: `0.2.0-rc.1` (#36 prepared the changelogs). All three packages went live under `next` after the maintainer approved each stage on npm; `latest` stays 0.1.0. Each has provenance naming commit 47da5e0, the adapters pin `@typewirets/core` to exactly 0.2.0-rc.1, and the workflow created the `v0.2.0-rc.1` tag on that commit and a pre-release with notes from the changelogs. On npm's trusted-publisher form, staging is always allowed and the only options are "Allow npm publish" and "Allow npm dist-tag", both left off. No npm token or GitHub secret is used.
+- 2026-11-08: 0.2.0 released through the workflow (#37 prepared the changelogs; dry run, then the real run). All three packages are npm's `latest` at 0.2.0, with provenance naming aac33c8, the commit `v0.2.0` points at; the adapters pin `@typewirets/core` to exactly 0.2.0, and the GitHub release is the repository's latest. Q3 is met: the next real release shipped end to end. Done.
 
 ## Open
 
@@ -28,6 +29,5 @@ The maintainer releases `@typewirets/core`, `@typewirets/inversify` and `@typewi
 
 ## Next steps
 
-1. Release 0.2.0 (stable): give each changelog a `## 0.2.0` section, either the rc's notes or a line pointing to them (`/release` suggests 0.2.0 and can open the PR). Then dry run and release. That completes Q3.
-2. On npm, set each package's publishing access to "Require two-factor authentication and disallow tokens", and revoke npm tokens no longer used.
-3. Note any answer to Q4 when it shows up (stage expiry, re-staging a pending version).
+1. On npm, set each package's publishing access to "Require two-factor authentication and disallow tokens", and revoke npm tokens no longer used.
+2. Note any answer to Q4 when it shows up (stage expiry, re-staging a pending version).
