@@ -3,7 +3,11 @@
 ## Prerequisites
 
 - **Node.js** >= 22 (a supported LTS line; the dev shell and the release use 26, the active LTS)
-- **pnpm** 12 or later, installed any way you like (for example `npm install -g pnpm`). Any pnpm 12 switches to the exact version in `package.json`'s `packageManager` field, after checking it against npm's signature and the hashes in `pnpm-lock.yaml`. Corepack is not used: Node.js 25 and later no longer bundle it.
+- **pnpm** 12 or later, installed the way [pnpm recommends](https://pnpm.io/installation):
+  - Linux and macOS: the standalone script, `curl -fsSL https://get.pnpm.io/install.sh | sh -`
+  - Windows: `npm install -g pnpm@latest`
+
+  Any pnpm 12 switches to the exact version in `package.json`'s `packageManager` field, after checking it against npm's signature and the hashes in `pnpm-lock.yaml`. Corepack is not used: Node.js 25 and later no longer bundle it, and pnpm's docs say not to use it.
 
 Or let [Nix](https://nixos.org/download) with flakes provide all of it: `nix develop --no-pure-eval` (or `direnv allow`, with [nix-direnv](https://github.com/nix-community/nix-direnv)) gives you Node.js 26, pnpm, `just`, `gh` and `git`. The dev shell is built with [devenv](https://devenv.sh), which needs `--no-pure-eval` to find the project directory, the same as in [typewirego](https://github.com/typewirego/typewirego) and [typewirepy](https://github.com/typewirepy/typewirepy).
 
