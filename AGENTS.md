@@ -32,8 +32,9 @@ Before adding an action, check its Marketplace listing yourself. Confirm the own
 | `actions/cache` | GitHub | Verified creator | |
 | `actions/upload-artifact` | GitHub | Verified creator | |
 | `actions/download-artifact` | GitHub | Verified creator | |
+| `pnpm/action-setup` | pnpm | Not verified | pnpm's own installer for GitHub Actions. Maintainer sign-off: #39. Pin it to a full commit SHA like every action, read the diff before each bump, and keep the `pnpm --version` check after it. |
 
-There are no exceptions today. pnpm is installed with a `run:` step, `node scripts/setup-pnpm.mjs`, rather than the unverified `pnpm/action-setup`. npm installs the `packageManager` version with scripts off, and the script refuses it unless every package matches the hashes in `pnpm-lock.yaml`. Don't bring back Corepack: Node.js 25 and later don't bundle it.
+`pnpm/action-setup` is the only exception. It installs pnpm from its own committed npm lockfile and then switches to the version in `packageManager`. A step after it checks that `pnpm --version` matches. Don't bring back Corepack: Node.js 25 and later don't bundle it.
 
 ### GitHub Actions: pin to a full commit SHA
 

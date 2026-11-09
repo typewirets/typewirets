@@ -29,11 +29,17 @@ jobs:
       with:
         node-version: ${{ matrix.node-version }}
 
-    # No Corepack (Node 25+ doesn't bundle it): npm installs the pnpm version in
-    # packageManager, and the script checks every package npm installed against
-    # the hashes pnpm-lock.yaml pins before pnpm's own code runs.
+    # A documented exception in AGENTS.md, pinned to a commit. It installs a
+    # bootstrap pnpm from its own committed npm lockfile, then self-updates to
+    # the version in packageManager, checked against npm's signature. No
+    # Corepack: Node 25+ doesn't bundle it.
     - name: Setup pnpm
-      run: node scripts/setup-pnpm.mjs "$RUNNER_TEMP/pnpm" >> "$GITHUB_PATH"
+      uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+    # pnpm can fall back to the version it is running instead of failing, so
+    # make sure the pinned version is the one on PATH.
+    - name: Check pnpm version
+      run: test "$(pnpm --version)" = "$(node -p "require('./package.json').packageManager.replace(/^pnpm@/, '')")"
 
     - name: Get pnpm store directory
       id: pnpm-cache

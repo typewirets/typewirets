@@ -64,10 +64,13 @@ jobs:
         with:
           node-version: '26'
 
-      # As in ci.yml: npm installs the pnpm version in packageManager, checked
-      # against the hashes in pnpm-lock.yaml.
+      # As in ci.yml: the pinned pnpm/action-setup installs the version in
+      # packageManager, and the next step checks it is the one on PATH.
       - name: Setup pnpm
-        run: node scripts/setup-pnpm.mjs "$RUNNER_TEMP/pnpm" >> "$GITHUB_PATH"
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - name: Check pnpm version
+        run: test "$(pnpm --version)" = "$(node -p "require('./package.json').packageManager.replace(/^pnpm@/, '')")"
 
       # Staging needs npm >= 11.15.0 (trusted publishing >= 11.5.1). Node 26
       # bundles npm 11.20, so nothing is installed; this only guards the minimum.
